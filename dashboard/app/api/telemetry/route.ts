@@ -1,14 +1,15 @@
 import { Redis } from '@upstash/redis';
 import { NextResponse } from 'next/server';
 
-// This configuration explicitly allows cross-origin requests and custom API headers
+// This explicitly tells Next.js NEVER to cache this API route
+export const dynamic = 'force-dynamic';
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-API-KEY, x-api-key',
 };
 
-// 1. Handles the browser's security handshake (Preflight)
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
@@ -16,21 +17,19 @@ export async function OPTIONS() {
   });
 }
 
-// 2. Handles pulling data from Upstash Redis to show on your Homepage
 export async function GET() {
   try {
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (!url || !token) {
       return NextResponse.json(
         { success: false, error: "Database environmental variables missing on Vercel." },
         { status: 500, headers: corsHeaders }
       );
     }
 
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    });
-
+    const redis = new Redis({ url, token });
     const data = await redis.get('pawguard_data');
 
     return NextResponse.json(
@@ -46,7 +45,6 @@ export async function GET() {
   }
 }
 
-// 3. Handles incoming hardware events
 export async function POST(req: Request) {
   const authHeader = req.headers.get('x-api-key');
   if (authHeader !== process.env.HARDWARE_SECRET_KEY) {
@@ -57,7 +55,10 @@ export async function POST(req: Request) {
   }
 
   try {
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+
+    if (!url || !token) {
       return NextResponse.json(
         { success: false, error: "Database environmental variables missing on Vercel." },
         { status: 500, headers: corsHeaders }
@@ -75,12 +76,8 @@ export async function POST(req: Request) {
       );
     }
 
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    });
+    const redis = new Redis({ url, token });
 
-    // Save payload alongside a freshly generated generation timestamp
     await redis.set('pawguard_data', JSON.stringify({
       ...body,
       timestamp: new Date().toISOString()
