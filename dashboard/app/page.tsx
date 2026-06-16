@@ -154,18 +154,39 @@ export default function PawGuardDashboard() {
     setDocuments(prev => prev.filter(doc => doc.id !== id));
   };
 
+  // SMART DATETIME PARSER ENGINE (Fixes the Invalid Date bug for both String and Epoch inputs)
+  const formatTimeSafely = (timestampValue: any) => {
+    if (!timestampValue) return '--:--:--';
+    
+    try {
+      // If it's a pure number or numeric string (like Python's time.time() in seconds)
+      if (!isNaN(timestampValue) && Number(timestampValue) < 10000000000) {
+        return new Date(Number(timestampValue) * 1000).toLocaleTimeString();
+      }
+      // If it's already a full millisecond number
+      if (!isNaN(timestampValue)) {
+        return new Date(Number(timestampValue)).toLocaleTimeString();
+      }
+      // If it's an ISO String from the server (e.g., "2026-06-16T15:00:00.000Z")
+      return new Date(timestampValue).toLocaleTimeString();
+    } catch (error) {
+      return '--:--:--';
+    }
+  };
+
   // Telemetry Selectors
   const currentSound = telemetry?.audio_analytics?.detected_classification || telemetry?.audio_analytics?.classified_sound || 'SILENCE';
   const confidenceScore = telemetry?.audio_analytics?.inference_confidence_pct ?? telemetry?.audio_analytics?.confidence ?? 100;
   
-  // FIXED: Explicitly grouped nullish values inside parens to resolve Turbopack compiler error
   const roomTemp = (telemetry?.environment?.temperature_c ?? telemetry?.central_module?.room_temp ?? telemetry?.environment?.room_temp) ?? '--';
   const lightLevel = (telemetry?.environment?.ambient_light_lux ?? telemetry?.central_module?.light_lux ?? telemetry?.environment?.light_lux) ?? '--';
 
   const movement = (telemetry?.collar_metrics?.activity_state ?? telemetry?.collar?.movement_activity) || 'STATIONARY';
   const distance = telemetry?.collar_metrics?.distance_from_hub_meters ?? telemetry?.edge_analytics?.distance_meters ?? 0;
   const stressScore = telemetry?.edge_analytics?.stress_level || 'LOW';
-  const lastSyncTime = telemetry?.timestamp ? new Date(telemetry.timestamp * 1000).toLocaleTimeString() : '--:--:--';
+  
+  // Safe display for the header clock
+  const lastSyncTime = formatTimeSafely(telemetry?.timestamp);
 
   const isGeofenceBreached = distance > allowedRadius;
 
@@ -485,7 +506,7 @@ export default function PawGuardDashboard() {
                   <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.55rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', borderLeft: `3px solid ${getStatusColor(sound, stress)}` }}>
                     <div style={{ fontSize: '0.78rem', fontWeight: 600, color: getStatusColor(sound, stress) }}>{sound}</div>
                     <div style={{ fontSize: '0.68rem', color: '#71717a' }}>
-                      {p.timestamp ? new Date(p.timestamp * 1000).toLocaleTimeString() : 'Syncing Time...'}
+                      {p.timestamp ? formatTimeSafely(p.timestamp) : 'Syncing Time...'}
                     </div>
                   </div>
                 );
