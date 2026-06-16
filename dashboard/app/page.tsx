@@ -6,13 +6,11 @@ export default function PawGuardDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  // Function to pull latest database data from your working API
   const fetchTelemetry = async () => {
     try {
       const res = await fetch('/api/telemetry');
       const result = await res.json();
       if (result.success) {
-        // Parse data if it was stringified in Redis
         const parsedData = typeof result.telemetry === 'string' 
           ? JSON.parse(result.telemetry) 
           : result.telemetry;
@@ -27,7 +25,6 @@ export default function PawGuardDashboard() {
     }
   };
 
-  // Poll the database every 5 seconds for live real-time updates
   useEffect(() => {
     fetchTelemetry();
     const interval = setInterval(fetchTelemetry, 5000);
