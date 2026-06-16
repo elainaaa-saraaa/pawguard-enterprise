@@ -12,15 +12,11 @@ export default function PawGuardDashboard() {
       if (result.success && result.telemetry) {
         const data = typeof result.telemetry === 'string' ? JSON.parse(result.telemetry) : result.telemetry;
         setTelemetry(data);
-        
         if (result.history) {
-          setPacketHistory(result.history.map((p: any) => ({
-            ...p,
-            localTime: new Date(p.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-          })));
+          setPacketHistory(result.history);
         }
       }
-    } catch (e) { console.error('Polling error', e); }
+    } catch (e) { console.error(e); }
   };
 
   useEffect(() => {
@@ -29,57 +25,51 @@ export default function PawGuardDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Mapping the specific JSON structure you provided
+  // MAPPING YOUR SPECIFIC JSON DATA
   const isRunaway = telemetry?.edge_analytics?.runaway_alert === true;
   const distance = telemetry?.edge_analytics?.distance_meters ?? 0;
   const sound = telemetry?.audio_analytics?.classified_sound ?? 'SILENCE';
-  const confidence = telemetry?.audio_analytics?.model_confidence_pct ?? 0;
 
   return (
-    <div style={{ padding: '2rem', backgroundColor: '#060b13', color: '#fff', minHeight: '100vh', fontFamily: 'system-ui, sans-serif' }}>
-      
-      <header style={{ marginBottom: '2rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{ padding: '2rem', backgroundColor: '#060b13', color: '#fff', minHeight: '100vh', fontFamily: 'sans-serif' }}>
+      <header style={{ marginBottom: '2rem' }}>
         <h1 style={{ margin: 0 }}>PawGuard <span style={{ color: '#00df89' }}>Enterprise</span></h1>
-        <div style={{ fontSize: '0.8rem', color: '#475569' }}>HUB: {telemetry?.device_info?.hub_id || 'PG-HUB-00192X'}</div>
       </header>
 
-      {/* ALERT BANNER */}
+      {/* ALERT SECTION */}
       <div style={{ 
         backgroundColor: isRunaway ? '#7f1d1d' : '#064e3b', 
-        padding: '1.2rem', 
+        padding: '1rem', 
         borderRadius: '8px', 
         marginBottom: '2rem', 
-        border: `1px solid ${isRunaway ? '#b91c1c' : '#047857'}` 
+        border: '1px solid' 
       }}>
-        <strong style={{ fontSize: '1rem' }}>
-          {isRunaway ? `🚨 ALERT: Geofence Breach! Pet is ${distance}m away!` : '🛡️ System Status: Secure (Containment Active)'}
-        </strong>
+        {isRunaway ? "🚨 CRITICAL: GE FENCE BREACH" : "🛡️ SYSTEM SECURE"}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem' }}>
-        
         {/* METRICS */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-          <div style={{ backgroundColor: '#0a111c', padding: '1.5rem', borderRadius: '12px', border: '1px solid #141f32' }}>
-            <h3 style={{ color: '#475569', fontSize: '0.7rem', textTransform: 'uppercase' }}>Distance</h3>
-            <p style={{ fontSize: '2rem', fontWeight: 'bold' }}>{distance}<span style={{ fontSize: '1rem', color: '#475569' }}>m</span></p>
+          <div style={{ backgroundColor: '#0a111c', padding: '1.5rem', borderRadius: '12px' }}>
+            <h3>SOUND</h3>
+            <p style={{ fontSize: '1.5rem' }}>{sound}</p>
           </div>
-          <div style={{ backgroundColor: '#0a111c', padding: '1.5rem', borderRadius: '12px', border: '1px solid #141f32' }}>
-            <h3 style={{ color: '#475569', fontSize: '0.7rem', textTransform: 'uppercase' }}>Audio Class</h3>
-            <p style={{ fontSize: '1.5rem', color: '#38bdf8', fontWeight: 'bold' }}>{sound}</p>
+          <div style={{ backgroundColor: '#0a111c', padding: '1.5rem', borderRadius: '12px' }}>
+            <h3>DISTANCE</h3>
+            <p style={{ fontSize: '1.5rem' }}>{distance}m</p>
           </div>
-          <div style={{ backgroundColor: '#0a111c', padding: '1.5rem', borderRadius: '12px', border: '1px solid #141f32' }}>
-            <h3 style={{ color: '#475569', fontSize: '0.7rem', textTransform: 'uppercase' }}>Confidence</h3>
-            <p style={{ fontSize: '2rem', fontWeight: 'bold' }}>{confidence}%</p>
+          <div style={{ backgroundColor: '#0a111c', padding: '1.5rem', borderRadius: '12px' }}>
+            <h3>CONFIDENCE</h3>
+            <p style={{ fontSize: '1.5rem' }}>{telemetry?.audio_analytics?.model_confidence_pct ?? 0}%</p>
           </div>
         </div>
 
         {/* FEED */}
-        <div style={{ backgroundColor: '#0a111c', padding: '1.5rem', borderRadius: '12px', border: '1px solid #141f32', maxHeight: '400px', overflowY: 'auto' }}>
-          <h3 style={{ fontSize: '0.8rem', color: '#94a3b8', marginBottom: '1rem' }}>LIVE TELEMETRY STREAM</h3>
+        <div style={{ backgroundColor: '#0a111c', padding: '1.5rem', borderRadius: '12px' }}>
+          <h3>HISTORY</h3>
           {packetHistory.map((p, i) => (
-            <div key={i} style={{ borderBottom: '1px solid #141f32', padding: '0.7rem 0', fontSize: '0.85rem' }}>
-              <span style={{ color: '#475569' }}>{p.localTime}</span> — {p.audio_analytics?.classified_sound} — <span style={{ color: '#00df89' }}>{p.edge_analytics?.distance_meters}m</span>
+            <div key={i} style={{ borderBottom: '1px solid #333', padding: '0.5rem 0' }}>
+              {p.audio_analytics?.classified_sound} | {p.edge_analytics?.distance_meters}m
             </div>
           ))}
         </div>
