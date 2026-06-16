@@ -3,24 +3,40 @@ import { useEffect, useState } from 'react';
 import { 
   Activity, Shield, Thermometer, Sun, DoorOpen, DoorClosed, 
   Volume2, Wind, Utensils, Calendar, Heart, Award, 
-  Sparkles, CheckCircle, Clock
+  Sparkles, CheckCircle, Clock, Plus, X, Bell
 } from 'lucide-react';
+
+interface Reminder {
+  id: number;
+  title: string;
+  date: string;
+  time: string;
+  type: string;
+  completed: boolean;
+}
 
 export default function PawGuardDashboard() {
   const [telemetry, setTelemetry] = useState<any>(null);
   const [packetHistory, setPacketHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
-  // Interface Control Overrides (Simulated Actuators)
+  // Appliance Control States
   const [fanOn, setFanOn] = useState<boolean>(false);
   const [acOn, setAcOn] = useState<boolean>(false);
   const [dispenseSuccess, setDispenseSuccess] = useState<boolean>(false);
 
-  // Vaccine and Appointment Reminder Registry
-  const [reminders, setReminders] = useState([
-    { id: 1, title: "Rabies Booster Shot", date: "2026-07-12", type: "Vaccine", completed: false },
-    { id: 2, title: "Routine Vet Checkup", date: "2026-08-05", type: "Vet Visit", completed: false },
-    { id: 3, title: "Deworming Preventative", date: "2026-06-25", type: "Medication", completed: true },
+  // Reminders & Modal States
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [activeNotifications, setActiveNotifications] = useState<string[]>([]);
+  const [newTitle, setNewTitle] = useState<string>('');
+  const [newDate, setNewDate] = useState<string>('');
+  const [newTime, setNewTime] = useState<string>('');
+  const [newType, setNewType] = useState<string>('Vaccine');
+
+  const [reminders, setReminders] = useState<Reminder[]>([
+    { id: 1, title: "Rabies Booster Shot", date: "2026-07-12", time: "10:00", type: "Vaccine", completed: false },
+    { id: 2, title: "Routine Vet Checkup", date: "2026-08-05", time: "14:30", type: "Vet Visit", completed: false },
+    { id: 3, title: "Deworming Preventative", date: "2026-06-17", time: "09:00", type: "Medication", completed: false },
   ]);
 
   const fetchTelemetry = async () => {
@@ -32,7 +48,6 @@ export default function PawGuardDashboard() {
         setTelemetry(data);
         if (result.history) setPacketHistory(result.history);
         
-        // Sync static triggers to match external physical stream values if initialized
         if (data.central_module) {
           if (data.central_module.fan_status !== undefined) setFanOn(!!data.central_module.fan_status);
           if (data.central_module.ac_status !== undefined) setAcOn(!!data.central_module.ac_status);
@@ -50,6 +65,32 @@ export default function PawGuardDashboard() {
     return () => clearInterval(interval);
   }, []);
 
+  // Notification Engine checking for tasks due within 24 hours
+  useEffect(() => {
+    const checkNotifications = () => {
+      const now = new Date().getTime();
+      const oneDayInMs = 24 * 60 * 60 * 1000;
+      const alerts: string[] = [];
+
+      reminders.forEach(rem => {
+        if (!rem.completed) {
+          const targetDateTime = new Date(`${rem.date}T${rem.time || '00:00'}`).getTime();
+          const timeDifference = targetDateTime - now;
+
+          // Alert if event is in the future but within 24 hours
+          if (timeDifference > 0 && timeDifference <= oneDayInMs) {
+            alerts.push(`Upcoming ${rem.type}: "${rem.title}" is due in less than 24 hours! (${rem.date} @ ${rem.time})`);
+          }
+        }
+      });
+      setActiveNotifications(alerts);
+    };
+
+    checkNotifications();
+    const notificationInterval = setInterval(checkNotifications, 5000);
+    return () => clearInterval(notificationInterval);
+  }, [reminders]);
+
   const triggerDispenser = () => {
     setDispenseSuccess(true);
     setTimeout(() => setDispenseSuccess(false), 3000);
@@ -59,7 +100,27 @@ export default function PawGuardDashboard() {
     setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r));
   };
 
-  // Safe Parameter Extractors with Explicit Fallbacks
+  const handleAddReminder = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle || !newDate || !newTime) return;
+
+    const created: Reminder = {
+      id: Date.now(),
+      title: newTitle,
+      date: newDate,
+      time: newTime,
+      type: newType,
+      completed: false
+    };
+
+    setReminders(prev => [created, ...prev]);
+    setNewTitle('');
+    setNewDate('');
+    setNewTime('');
+    setIsModalOpen(false);
+  };
+
+  // Safe Parameter Extractors with Fallbacks
   const currentSound = telemetry?.audio_analytics?.classified_sound || 'SILENCE';
   const confidenceScore = telemetry?.audio_analytics?.confidence ?? 100;
   
@@ -70,6 +131,7 @@ export default function PawGuardDashboard() {
   const roomTemp = telemetry?.central_module?.room_temp ?? telemetry?.environment?.room_temp ?? '--';
   const lightLevel = telemetry?.central_module?.light_lux ?? telemetry?.environment?.light_lux ?? '--';
   const isDoorOpen = telemetry?.central_module?.door_open ?? telemetry?.environment?.door_open ?? false;
+  const lastSyncTime = telemetry?.timestamp ? new Date(telemetry.timestamp).toLocaleTimeString() : '--:--:--';
 
   const getStatusColor = (sound: string) => {
     switch (sound.toUpperCase()) {
@@ -81,20 +143,29 @@ export default function PawGuardDashboard() {
     }
   };
 
-  // Dynamic Clinical Health Score Generator
-  const calculateHealthScore = () => {
+  const healthScore = (() => {
     let score = 100;
     if (currentSound === 'BARK' || currentSound === 'GROWL') score -= 12;
     if (Number(collarTemp) > 39.2 || Number(collarTemp) < 37.8) score -= 15;
     if (Number(collarNoise) > 75) score -= 8;
     return Math.max(score, 45);
-  };
-
-  const healthScore = calculateHealthScore();
+  })();
 
   return (
-    <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '2.5rem' }}>
+    <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '2.5rem', position: 'relative' }}>
       
+      {/* 24-HOUR PROXIMITY NOTIFICATION BANNER ARRAY */}
+      {activeNotifications.length > 0 && (
+        <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+          {activeNotifications.map((note, index) => (
+            <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid #F59E0B', padding: '1rem', borderRadius: '12px', color: '#FBBF24', fontSize: '0.85rem', fontWeight: 600 }}>
+              <Bell size={18} className="animate-pulse" />
+              <span>{note}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* GLOBAL SYSTEM BRAND HEADER */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1.5rem' }}>
         <div>
@@ -106,11 +177,16 @@ export default function PawGuardDashboard() {
           </div>
           <p style={{ color: '#a1a1aa', fontSize: '0.85rem', margin: '0.35rem 0 0 0' }}>Edge-ML Array & Automated Environmental Hub</p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1.25rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
-          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981', display: 'inline-block' }}></span>
-          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e4e4e7' }}>
-            {isLoading ? 'Establishing Uplink...' : 'Live Nodes Connected'}
-          </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1.25rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
+            <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981', display: 'inline-block' }}></span>
+            <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e4e4e7' }}>
+              {isLoading ? 'Establishing Uplink...' : 'Live Nodes Connected'}
+            </span>
+          </div>
+          <div style={{ fontSize: '0.72rem', color: '#71717a', marginRight: '0.5rem' }}>
+            Simulator Last Packet: <span style={{ color: '#10B981', fontWeight: 'bold' }}>{lastSyncTime}</span>
+          </div>
         </div>
       </header>
 
@@ -288,9 +364,20 @@ export default function PawGuardDashboard() {
 
           {/* VACCINE & VET APPOINTMENT REGISTRY */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Calendar size={15} color="#A78BFA" /> Schedules & Reminders
-            </h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                <Calendar size={15} color="#A78BFA" /> Schedules & Reminders
+              </h3>
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#27272a', color: '#f4f4f5', border: '1px solid #3f3f46', borderRadius: '6px', padding: '0.3rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', transition: 'background-color 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3f3f46'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
+              >
+                <Plus size={14} /> Add Reminder
+              </button>
+            </div>
+            
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
               {reminders.map((rem) => (
                 <div key={rem.id} style={{ display: 'flex', alignItems: 'center', padding: '0.7rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', opacity: rem.completed ? 0.5 : 1, justifyContent: 'space-between' }}>
@@ -300,7 +387,7 @@ export default function PawGuardDashboard() {
                     </div>
                     <div>
                       <div style={{ fontSize: '0.8rem', fontWeight: 600, textDecoration: rem.completed ? 'line-through' : 'none' }}>{rem.title}</div>
-                      <div style={{ fontSize: '0.68rem', color: '#71717a' }}>{rem.type} • {rem.date}</div>
+                      <div style={{ fontSize: '0.68rem', color: '#71717a' }}>{rem.type} • {rem.date} <span style={{ color: '#a1a1aa' }}>@{rem.time}</span></div>
                     </div>
                   </div>
                   <button 
@@ -341,6 +428,80 @@ export default function PawGuardDashboard() {
         </div>
 
       </div>
+
+      {/* SCHEDULE INTERFACE CREATOR MODAL OVERLAY */}
+      {isModalOpen && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
+          <div style={{ backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '20px', padding: '2rem', width: '100%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Create New Schedule</h3>
+              <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddReminder} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Reminder Description</label>
+                <input 
+                  type="text" 
+                  value={newTitle} 
+                  onChange={(e) => setNewTitle(e.target.value)} 
+                  placeholder="e.g., Annual Rabies Shot"
+                  required
+                  style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', outline: 'none' }}
+                />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                <label style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Category Type</label>
+                <select 
+                  value={newType} 
+                  onChange={(e) => setNewType(e.target.value)}
+                  style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+                >
+                  <option value="Vaccine">Vaccine</option>
+                  <option value="Vet Visit">Vet Visit</option>
+                  <option value="Medication">Medication</option>
+                  <option value="Grooming">Grooming</option>
+                </select>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Target Date</label>
+                  <input 
+                    type="date" 
+                    value={newDate} 
+                    onChange={(e) => setNewDate(e.target.value)} 
+                    required
+                    style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', outline: 'none', colorScheme: 'dark', cursor: 'pointer' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                  <label style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Target Time</label>
+                  <input 
+                    type="time" 
+                    value={newTime} 
+                    onChange={(e) => setNewTime(e.target.value)} 
+                    required
+                    style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', outline: 'none', colorScheme: 'dark', cursor: 'pointer' }}
+                  />
+                </div>
+              </div>
+
+              <button 
+                type="submit"
+                style={{ backgroundColor: '#10B981', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.75rem', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', marginTop: '0.5rem', transition: 'background-color 0.2s' }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#059669'}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#10B981'}
+              >
+                Save Appointment Schedule
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
