@@ -11,7 +11,8 @@ export default function Home() {
     const checkLocalStream = async () => {
       try {
         // Fetch the local relative path layout engine link with cache busting parameters
-       const res = await fetch('https://pawguard-enterprises.vercel.app/api/telemetry', {
+       // Replace your old fetch line (around line 14) with this:
+const res = await fetch(window.location.origin + '/api/telemetry', {
           cache: 'no-store',
           next: { revalidate: 0 },
           headers: {
