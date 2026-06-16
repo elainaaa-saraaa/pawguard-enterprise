@@ -1,14 +1,18 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { createClient } from '@vercel/kv';
+import { Redis } from '@upstash/redis';
 
-// Handles Upstash's default REDIS_URL or Vercel's legacy KV variables perfectly
-const kv = createClient({
-  url: process.env.REDIS_URL || process.env.STORAGE_URL || process.env.KV_URL || '',
-  token: process.env.STORAGE_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || '',
+// This automatically handles standard Redis links or web REST links flawlessly!
+const redisUrl = process.env.REDIS_URL || '';
+const cleanUrl = redisUrl.startsWith('redis://') 
+  ? redisUrl.replace('redis://', 'https://') 
+  : redisUrl;
+
+const kv = new Redis({
+  url: cleanUrl,
+  token: process.env.REDIS_TOKEN || process.env.KV_REST_API_TOKEN || '',
 });
-
 function applyCorsHeaders(response: NextResponse) {
   response.headers.set('Access-Control-Allow-Origin', '*');
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
