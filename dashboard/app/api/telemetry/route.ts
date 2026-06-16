@@ -38,15 +38,9 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     
-    // Inject a clean, static server-side time string right into the packet payload
-    const platformTime = new Date().toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: true
-    });
+    // Attach ISO timestamp for client-side local conversion
+    body.timestamp = new Date().toISOString();
     
-    body.processed_time = platformTime;
     const bodyString = JSON.stringify(body);
     
     await redis.set('telemetry', bodyString);

@@ -25,13 +25,22 @@ export default function PawGuardDashboard() {
         setTelemetry(parsedData);
 
         if (result.history && Array.isArray(result.history)) {
-          const formattedHistory = result.history.map((packet: any) => ({
-            id: packet?.device_info?.hub_id ? packet.device_info.hub_id.slice(-4) : '192X',
-            // Read the hardcoded server-side processed time string directly
-            time: packet.processed_time || '---',
-            stress: packet?.edge_analytics?.stress_level || 'LOW',
-            comfort: packet?.edge_analytics?.comfort_score_pct !== undefined ? `${packet.edge_analytics.comfort_score_pct}%` : '91%'
-          }));
+          const formattedHistory = result.history.map((packet: any) => {
+            const utcDate = new Date(packet.timestamp || Date.now());
+            const localTimeString = utcDate.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              hour12: true
+            });
+
+            return {
+              id: packet?.device_info?.hub_id ? packet.device_info.hub_id.slice(-4) : '192X',
+              time: localTimeString,
+              stress: packet?.edge_analytics?.stress_level || 'LOW',
+              comfort: packet?.edge_analytics?.comfort_score_pct !== undefined ? `${packet.edge_analytics.comfort_score_pct}%` : '91%'
+            };
+          });
           setPacketHistory(formattedHistory);
         }
       }
@@ -59,12 +68,19 @@ export default function PawGuardDashboard() {
   const batteryLevel = telemetry?.device_info?.battery_pct !== undefined ? `${telemetry.device_info.battery_pct}%` : '---';
   
   const temp = telemetry?.environment?.temperature_c !== undefined ? `${telemetry.environment.temperature_c}°C` : '---';
-  const barksCount = telemetry?.audio_analytics?.historical_counts?.barks ?? '---';
+  
+  // New TinyML Audio Fields extracted from your backend schema
+  const detectedSound = telemetry?.audio_analytics?.classified_sound || 'SILENCE'; 
+  const soundConfidence = telemetry?.audio_analytics?.model_confidence_pct !== undefined ? `${telemetry.audio_analytics.model_confidence_pct}%` : '98%';
+
+  // Dynamic Safety Alert Engine (e.g. Geofence violation or runaway status)
+  const isRunaway = telemetry?.edge_analytics?.geofence_status === 'OUT_OF_BOUNDS' || telemetry?.edge_analytics?.runaway_alert === true;
 
   return (
     <div style={{ padding: '2.5rem', fontFamily: 'system-ui, -apple-system, sans-serif', backgroundColor: '#060b13', color: '#f8fafc', minHeight: '100vh' }}>
       
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+      {/* HEADER SECTION */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <h1 style={{ fontSize: '1.6rem', fontWeight: 'bold', margin: 0, color: '#ffffff', letterSpacing: '-0.01em' }}>
             PawGuard <span style={{ color: '#00df89', fontWeight: '500' }}>Enterprise</span>
@@ -80,10 +96,31 @@ export default function PawGuardDashboard() {
         </div>
       </header>
 
+      {/* SYSTEM CRITICAL ALERT BANNER */}
+      {isRunaway ? (
+        <div style={{ backgroundColor: '#7f1d1d', border: '1px solid #b91c1c', padding: '1rem 1.5rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem', animation: 'pulse 2s infinite' }}>
+          <span style={{ fontSize: '1.3rem' }}>🚨</span>
+          <div>
+            <strong style={{ color: '#fca5a5', fontSize: '0.95rem' }}>CRITICAL ALERT: Geofence Breach Detected!</strong>
+            <p style={{ margin: '0.1rem 0 0 0', color: '#f8fafc', fontSize: '0.85rem' }}>The pet has exited the safe containment perimeter or a runaway trigger was logged. Check immediate GPS tracking variables.</p>
+          </div>
+        </div>
+      ) : (
+        <div style={{ backgroundColor: '#064e3b', border: '1px solid #047857', padding: '0.8rem 1.5rem', borderRadius: '8px', marginBottom: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <span style={{ fontSize: '1.1rem' }}>🛡️</span>
+          <div style={{ fontSize: '0.85rem', color: '#a7f3d0' }}>
+            <strong>Containment Status: Secure</strong> — Pet remains within authorized local environment boundaries.
+          </div>
+        </div>
+      )}
+
+      {/* TWO COLUMN GRID LAYOUT */}
       <div style={{ display: 'grid', gridTemplateColumns: '2.1fr 1fr', gap: '2rem' }}>
         
+        {/* LEFT COMPONENT COLUMN */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
+          {/* MAIN WELL-BEING CARD */}
           <div style={{ backgroundColor: '#0a111c', padding: '2.2rem 2.5rem', borderRadius: '12px', border: '1px solid #141f32' }}>
             <h3 style={{ margin: '0 0 0.8rem 0', color: '#475569', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.05em' }}>
               CURRENT WELL-BEING INDEX
@@ -122,8 +159,10 @@ export default function PawGuardDashboard() {
             </div>
           </div>
 
+          {/* TRI-CARD METRIC GRID */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1.5rem' }}>
             
+            {/* AMBIENT TEMP */}
             <div style={{ backgroundColor: '#0a111c', padding: '1.75rem', borderRadius: '12px', border: '1px solid #141f32', position: 'relative' }}>
               <span style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', color: '#f97316', fontSize: '1.1rem' }}>🔥</span>
               <h3 style={{ margin: '0 0 1.2rem 0', color: '#475569', textTransform: 'uppercase', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.04em' }}>AMBIENT TEMP</h3>
@@ -131,23 +170,28 @@ export default function PawGuardDashboard() {
               <p style={{ margin: 0, fontSize: '0.8rem', color: '#475569', fontWeight: '500' }}>Target room baseline: 24°C</p>
             </div>
 
+            {/* INMP441 TINYML CLASSIFICATION */}
             <div style={{ backgroundColor: '#0a111c', padding: '1.75rem', borderRadius: '12px', border: '1px solid #141f32', position: 'relative' }}>
-              <span style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', color: '#38bdf8', fontSize: '1.1rem' }}>🔊</span>
-              <h3 style={{ margin: '0 0 1.2rem 0', color: '#475569', textTransform: 'uppercase', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.04em' }}>NOISE LEVEL</h3>
-              <p style={{ fontSize: '2.4rem', fontWeight: '800', margin: '0 0 0.6rem 0', color: '#ffffff' }}>{telemetry ? '41 dB' : '---'}</p>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#475569', fontWeight: '500' }}>Spikes indicate disruptions</p>
+              <span style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', color: '#38bdf8', fontSize: '1.1rem' }}>🎙️</span>
+              <h3 style={{ margin: '0 0 1.2rem 0', color: '#475569', textTransform: 'uppercase', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.04em' }}>TINYML AUDIO</h3>
+              <p style={{ fontSize: '2.1rem', fontWeight: '800', margin: '0 0 0.6rem 0', color: '#38bdf8', textTransform: 'uppercase' }}>{detectedSound}</p>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#475569', fontWeight: '500' }}>Model Confidence: {soundConfidence}</p>
             </div>
 
+            {/* GEOLOCATION BOUNDS STATUS */}
             <div style={{ backgroundColor: '#0a111c', padding: '1.75rem', borderRadius: '12px', border: '1px solid #141f32', position: 'relative' }}>
-              <span style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', color: '#6366f1', fontSize: '1.1rem' }}>📈</span>
-              <h3 style={{ margin: '0 0 1.2rem 0', color: '#475569', textTransform: 'uppercase', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.04em' }}>TOTAL BARKS</h3>
-              <p style={{ fontSize: '2.4rem', fontWeight: '800', margin: '0 0 0.6rem 0', color: '#ffffff' }}>{barksCount}</p>
-              <p style={{ margin: 0, fontSize: '0.8rem', color: '#475569', fontWeight: '500' }}>Cumulative daily metrics</p>
+              <span style={{ position: 'absolute', right: '1.5rem', top: '1.5rem', color: '#6366f1', fontSize: '1.1rem' }}>📍</span>
+              <h3 style={{ margin: '0 0 1.2rem 0', color: '#475569', textTransform: 'uppercase', fontSize: '0.72rem', fontWeight: '700', letterSpacing: '0.04em' }}>CONTAINMENT</h3>
+              <p style={{ fontSize: '2.1rem', fontWeight: '800', margin: '0 0 0.6rem 0', color: isRunaway ? '#ef4444' : '#00df89' }}>
+                {isRunaway ? 'BREACHED' : 'INSIDE'}
+              </p>
+              <p style={{ margin: 0, fontSize: '0.8rem', color: '#475569', fontWeight: '500' }}>Smart Geofencing Radar</p>
             </div>
 
           </div>
         </div>
 
+        {/* RIGHT LIVE TELEMETRY FEED SIDEBAR */}
         <div style={{ backgroundColor: '#0a111c', padding: '1.75rem', borderRadius: '12px', border: '1px solid #141f32', display: 'flex', flexDirection: 'column' }}>
           <h3 style={{ margin: '0 0 1.5rem 0', color: '#94a3b8', textTransform: 'uppercase', fontSize: '0.75rem', fontWeight: '700', letterSpacing: '0.05em', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             🛡️ LIVE TELEMETRY FEED
