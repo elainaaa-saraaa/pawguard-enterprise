@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { 
   Activity, Shield, Thermometer, Sun, DoorOpen, DoorClosed, 
-  Volume2, Wind, Utensils, Calendar, Heart, Award, 
-  Sparkles, CheckCircle, Clock, Plus, X, Bell
+  Volume2, Calendar, Heart, Award, CheckCircle, Clock, 
+  Plus, X, Bell, User, UploadCloud, FileText, Trash2
 } from 'lucide-react';
 
 interface Reminder {
@@ -15,15 +15,27 @@ interface Reminder {
   completed: boolean;
 }
 
+interface MedicalDoc {
+  id: number;
+  name: string;
+  size: string;
+  dateAdded: string;
+}
+
 export default function PawGuardDashboard() {
   const [telemetry, setTelemetry] = useState<any>(null);
   const [packetHistory, setPacketHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
-  // Appliance Control States
-  const [fanOn, setFanOn] = useState<boolean>(false);
-  const [acOn, setAcOn] = useState<boolean>(false);
-  const [dispenseSuccess, setDispenseSuccess] = useState<boolean>(false);
+  // Profile & Document Management States
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [petName, setPetName] = useState<string>('Buddy');
+  const [petBreed, setPetBreed] = useState<string>('Golden Retriever');
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [documents, setDocuments] = useState<MedicalDoc[]>([
+    { id: 1, name: "Rabies_Certification_2025.pdf", size: "1.2 MB", dateAdded: "2026-01-15" },
+    { id: 2, name: "Blood_Report_Q1.pdf", size: "840 KB", dateAdded: "2026-04-10" }
+  ]);
 
   // Reminders & Modal States
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -47,11 +59,6 @@ export default function PawGuardDashboard() {
         const data = typeof result.telemetry === 'string' ? JSON.parse(result.telemetry) : result.telemetry;
         setTelemetry(data);
         if (result.history) setPacketHistory(result.history);
-        
-        if (data.central_module) {
-          if (data.central_module.fan_status !== undefined) setFanOn(!!data.central_module.fan_status);
-          if (data.central_module.ac_status !== undefined) setAcOn(!!data.central_module.ac_status);
-        }
         setIsLoading(false);
       }
     } catch (e) { 
@@ -65,7 +72,7 @@ export default function PawGuardDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Notification Engine checking for tasks due within 24 hours
+  // Proximity notification logic (Sends alert 24h before event)
   useEffect(() => {
     const checkNotifications = () => {
       const now = new Date().getTime();
@@ -77,7 +84,6 @@ export default function PawGuardDashboard() {
           const targetDateTime = new Date(`${rem.date}T${rem.time || '00:00'}`).getTime();
           const timeDifference = targetDateTime - now;
 
-          // Alert if event is in the future but within 24 hours
           if (timeDifference > 0 && timeDifference <= oneDayInMs) {
             alerts.push(`Upcoming ${rem.type}: "${rem.title}" is due in less than 24 hours! (${rem.date} @ ${rem.time})`);
           }
@@ -90,11 +96,6 @@ export default function PawGuardDashboard() {
     const notificationInterval = setInterval(checkNotifications, 5000);
     return () => clearInterval(notificationInterval);
   }, [reminders]);
-
-  const triggerDispenser = () => {
-    setDispenseSuccess(true);
-    setTimeout(() => setDispenseSuccess(false), 3000);
-  };
 
   const toggleReminder = (id: number) => {
     setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r));
@@ -120,7 +121,31 @@ export default function PawGuardDashboard() {
     setIsModalOpen(false);
   };
 
-  // Safe Parameter Extractors with Fallbacks
+  // Document Upload Mock Functionality
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+
+    // Simulate network upload speed
+    setTimeout(() => {
+      const newDoc: MedicalDoc = {
+        id: Date.now(),
+        name: file.name,
+        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+        dateAdded: new Date().toISOString().split('T')[0]
+      };
+      setDocuments(prev => [newDoc, ...prev]);
+      setIsUploading(false);
+    }, 2000);
+  };
+
+  const handleDeleteDoc = (id: number) => {
+    setDocuments(prev => prev.filter(doc => doc.id !== id));
+  };
+
+  // Unified Extractor mapping directly to simulator telemetry paths
   const currentSound = telemetry?.audio_analytics?.classified_sound || 'SILENCE';
   const confidenceScore = telemetry?.audio_analytics?.confidence ?? 100;
   
@@ -154,12 +179,12 @@ export default function PawGuardDashboard() {
   return (
     <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '2.5rem', position: 'relative' }}>
       
-      {/* 24-HOUR PROXIMITY NOTIFICATION BANNER ARRAY */}
+      {/* 24-HOUR REMINDER ENGINE Banner notification */}
       {activeNotifications.length > 0 && (
         <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {activeNotifications.map((note, index) => (
             <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid #F59E0B', padding: '1rem', borderRadius: '12px', color: '#FBBF24', fontSize: '0.85rem', fontWeight: 600 }}>
-              <Bell size={18} className="animate-pulse" />
+              <Bell size={18} />
               <span>{note}</span>
             </div>
           ))}
@@ -193,7 +218,7 @@ export default function PawGuardDashboard() {
       {/* THREE COLUMN ARCHITECTURE */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '2rem' }}>
         
-        {/* BLOCK 1: EDGE COMPUTING & INTERACTIVE SWITCHES */}
+        {/* BLOCK 1: EDGE COMPUTING & MEDICAL DOCUMENT PROFILE VAULT */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
           {/* DIGITAL MICROPHONE ARRAY UNIT */}
@@ -219,51 +244,55 @@ export default function PawGuardDashboard() {
             </div>
           </div>
 
-          {/* SYSTEM ACTUATION TRIGGER CORES */}
+          {/* PROFILE VAULT & DOCUMENT UPLOADER */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Sparkles size={16} color="#3B82F6" /> Appliance Automation
+              <User size={16} color="#10B981" /> Pet Identity & Documents
             </h3>
             
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <Wind size={18} color={fanOn ? "#3B82F6" : "#52525b"} />
-                  <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Ventilation Fan</div>
-                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Auxiliary cooling relay</div>
-                  </div>
-                </div>
-                <button onClick={() => setFanOn(!fanOn)} style={{ backgroundColor: fanOn ? '#3B82F6' : '#27272a', color: '#fff', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', width: '55px' }}>
-                  {fanOn ? 'ON' : 'OFF'}
-                </button>
+            {/* Quick Profile Names */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '1.25rem' }}>
+              <div>
+                <span style={{ fontSize: '0.68rem', color: '#71717a', display: 'block' }}>Pet Name</span>
+                <input type="text" value={petName} onChange={(e) => setPetName(e.target.value)} style={{ width: '85%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.4rem 0.6rem', color: '#fff', fontSize: '0.8rem', marginTop: '0.25rem' }} />
               </div>
+              <div>
+                <span style={{ fontSize: '0.68rem', color: '#71717a', display: 'block' }}>Breed / Species</span>
+                <input type="text" value={petBreed} onChange={(e) => setPetBreed(e.target.value)} style={{ width: '85%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.4rem 0.6rem', color: '#fff', fontSize: '0.8rem', marginTop: '0.25rem' }} />
+              </div>
+            </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <Thermometer size={18} color={acOn ? "#EF4444" : "#52525b"} />
-                  <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Air Conditioner</div>
-                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Climate thermostat logic</div>
-                  </div>
-                </div>
-                <button onClick={() => setAcOn(!acOn)} style={{ backgroundColor: acOn ? '#EF4444' : '#27272a', color: '#fff', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', width: '55px' }}>
-                  {acOn ? 'ON' : 'OFF'}
-                </button>
-              </div>
+            {/* Document Trigger Upload area */}
+            <div 
+              onClick={() => fileInputRef.current?.click()}
+              style={{ border: '2px dashed #27272a', borderRadius: '12px', padding: '1rem', textAlign: 'center', cursor: 'pointer', backgroundColor: '#18181b', transition: 'border-color 0.2s', marginBottom: '1rem' }}
+              onMouseEnter={(e) => e.currentTarget.style.borderColor = '#10B981'}
+              onMouseLeave={(e) => e.currentTarget.style.borderColor = '#27272a'}
+            >
+              <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf,.png,.jpg,.jpeg,.doc" />
+              <UploadCloud size={24} color="#71717a" style={{ margin: '0 auto 0.5rem auto', display: 'block' }} />
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block' }}>
+                {isUploading ? "Uploading medical records..." : "Click to upload medical files"}
+              </span>
+              <span style={{ fontSize: '0.65rem', color: '#71717a', marginTop: '0.15rem', display: 'block' }}>PDF, Images up to 10MB</span>
+            </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <Utensils size={18} color={dispenseSuccess ? "#10B981" : "#52525b"} />
-                  <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Food Dispenser</div>
-                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Servomotor weight calibration</div>
+            {/* Uploaded Documents List */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '140px', overflowY: 'auto' }}>
+              {documents.map((doc) => (
+                <div key={doc.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', border: '1px solid #27272a' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
+                    <FileText size={16} color="#3B82F6" style={{ flexShrink: 0 }} />
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>{doc.name}</div>
+                      <div style={{ fontSize: '0.65rem', color: '#71717a' }}>{doc.size} • Uploaded {doc.dateAdded}</div>
+                    </div>
                   </div>
+                  <button onClick={() => handleDeleteDoc(doc.id)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem' }}>
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-                <button onClick={triggerDispenser} style={{ backgroundColor: dispenseSuccess ? '#10B981' : '#18181b', color: dispenseSuccess ? '#fff' : '#e4e4e7', border: '1px solid #27272a', padding: '0.4rem 0.85rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem' }}>
-                  {dispenseSuccess ? 'RELEASED' : 'DISPENSE'}
-                </button>
-              </div>
+              ))}
             </div>
           </div>
         </div>
@@ -371,8 +400,6 @@ export default function PawGuardDashboard() {
               <button 
                 onClick={() => setIsModalOpen(true)}
                 style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', backgroundColor: '#27272a', color: '#f4f4f5', border: '1px solid #3f3f46', borderRadius: '6px', padding: '0.3rem 0.6rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', transition: 'background-color 0.2s' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#3f3f46'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#27272a'}
               >
                 <Plus size={14} /> Add Reminder
               </button>
@@ -493,8 +520,6 @@ export default function PawGuardDashboard() {
               <button 
                 type="submit"
                 style={{ backgroundColor: '#10B981', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.75rem', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', marginTop: '0.5rem', transition: 'background-color 0.2s' }}
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#059669'}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#10B981'}
               >
                 Save Appointment Schedule
               </button>
