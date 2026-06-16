@@ -1,17 +1,13 @@
 import { Redis } from '@upstash/redis';
 import { NextResponse } from 'next/server';
 
-// Global CORS headers enabling communication between browsers, terminals, and devices
+// Updated to explicitly accept both uppercase and lowercase API key headers across all browsers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-API-KEY',
+  'Access-Control-Allow-Headers': 'Content-Type, X-API-KEY, x-api-key',
 };
 
-/**
- * 1. OPTIONS HANDLER (CORS Preflight)
- * Automatically responds to browser security pre-checks.
- */
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
@@ -19,10 +15,6 @@ export async function OPTIONS() {
   });
 }
 
-/**
- * 2. GET HANDLER (Database Read)
- * Fetches the latest telemetry packet from Upstash Redis to supply the frontend UI.
- */
 export async function GET() {
   try {
     if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
@@ -37,7 +29,6 @@ export async function GET() {
       token: process.env.UPSTASH_REDIS_REST_TOKEN,
     });
 
-    // Retrieve the current payload stored in Redis
     const data = await redis.get('pawguard_data');
 
     return NextResponse.json(
@@ -53,12 +44,7 @@ export async function GET() {
   }
 }
 
-/**
- * 3. POST HANDLER (Database Write)
- * Authenticates incoming device traffic, formats payloads safely, and updates Redis.
- */
 export async function POST(req: Request) {
-  // Validate Security Key
   const authHeader = req.headers.get('x-api-key');
   if (authHeader !== process.env.HARDWARE_SECRET_KEY) {
     return NextResponse.json(
@@ -75,7 +61,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Robust text parsing to bypass shell/terminal character encoding glitches (UTF-16)
     const rawText = await req.text();
     let body;
     try {
@@ -92,7 +77,6 @@ export async function POST(req: Request) {
       token: process.env.UPSTASH_REDIS_REST_TOKEN,
     });
 
-    // Commit telemetry packet with a live backend timestamp
     await redis.set('pawguard_data', JSON.stringify({
       ...body,
       timestamp: new Date().toISOString()
