@@ -32,10 +32,9 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     // Return the REAL error text
-    console.error("CRITICAL ERROR:", error);
     return NextResponse.json({ 
       success: false, 
-      error: error.message 
+      error: "!!! IF YOU SEE THIS, THE CODE UPDATED !!!" 
     }, { status: 500 });
   }
 }
