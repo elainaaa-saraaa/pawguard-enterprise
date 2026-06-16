@@ -35,7 +35,7 @@ export default function PawGuardDashboard() {
   const [petBreed, setPetBreed] = useState<string>('Golden Retriever');
   const [petPfp, setPetPfp] = useState<string>('https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=100');
   
-  // Geofence Dynamic Parameters
+  // Geofence Parameters
   const [allowedRadius, setAllowedRadius] = useState<number>(15);
 
   // Document Management States
@@ -80,7 +80,7 @@ export default function PawGuardDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // 24H Deadline Proximity Alert Checker
+  // Proximity Notification Hook
   useEffect(() => {
     const checkNotifications = () => {
       const now = new Date().getTime();
@@ -154,38 +154,31 @@ export default function PawGuardDashboard() {
     setDocuments(prev => prev.filter(doc => doc.id !== id));
   };
 
-  // --- STRICT SIMULATOR PAYLOAD EXTRACTION LOGIC ---
+  // Telemetry Selectors
   const currentSound = telemetry?.audio_analytics?.detected_classification || telemetry?.audio_analytics?.classified_sound || 'SILENCE';
   const confidenceScore = telemetry?.audio_analytics?.inference_confidence_pct ?? telemetry?.audio_analytics?.confidence ?? 100;
   
-  // Extracting from simulator's "environment" object block
   const roomTemp = telemetry?.environment?.temperature_c ?? telemetry?.central_module?.room_temp ?? telemetry?.environment?.room_temp ?? '--';
   const lightLevel = telemetry?.environment?.ambient_light_lux ?? telemetry?.central_module?.light_lux ?? telemetry?.environment?.light_lux ?? '--';
 
-  // Extracting from simulator's "collar_metrics" & "edge_analytics" object blocks
   const movement = telemetry?.collar_metrics?.activity_state ?? telemetry?.collar?.movement_activity || 'STATIONARY';
   const distance = telemetry?.collar_metrics?.distance_from_hub_meters ?? telemetry?.edge_analytics?.distance_meters ?? 0;
   const stressScore = telemetry?.edge_analytics?.stress_level || 'LOW';
-
-  // Extracting data dynamically for Health Report Index computation
-  const collarNoise = telemetry?.audio_analytics?.historical_counts?.barks !== undefined ? "Active Logs" : '--';
   const lastSyncTime = telemetry?.timestamp ? new Date(telemetry.timestamp * 1000).toLocaleTimeString() : '--:--:--';
 
-  // Geofence alarm trigger flag evaluated against user preference radius bounds
   const isGeofenceBreached = distance > allowedRadius;
 
-  // --- DYNAMIC FONT STYLE COLOR LOGIC ---
   const getStatusColor = (sound: string, stress: string) => {
     const cleanSound = sound.toUpperCase();
     const cleanStress = stress.toUpperCase();
 
     if (cleanSound === 'BARK' || cleanSound === 'GROWL' || cleanStress === 'HIGH' || isGeofenceBreached) {
-      return '#EF4444'; // Red Font -> Distressed/High Warning Status
+      return '#EF4444'; 
     }
     if (cleanSound === 'WHINE' || cleanSound === 'HUMAN SPEECH' || movement.toUpperCase() === 'RESTLESS') {
-      return '#F59E0B'; // Orange Font -> Anxious Alert Status
+      return '#F59E0B'; 
     }
-    return '#10B981'; // Green Font -> Balanced / Normal Operation
+    return '#10B981'; 
   };
 
   const healthScore = (() => {
@@ -197,15 +190,15 @@ export default function PawGuardDashboard() {
   return (
     <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '2.5rem', position: 'relative' }}>
       
-      {/* CRITICAL GEOFENCE ALARM BANNER */}
+      {/* BREACH ALERT BANNER */}
       {isGeofenceBreached && (
         <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '2px solid #EF4444', padding: '1.25rem', borderRadius: '14px', color: '#FCA5A5', fontSize: '1rem', fontWeight: 800, letterSpacing: '0.02em' }}>
-          <AlertTriangle size={24} className="animate-bounce" color="#EF4444" />
+          <AlertTriangle size={24} color="#EF4444" />
           <span>🚨 ALARM: GEOFENCE BREACH! Pet is {distance}m away (Max allowed: {allowedRadius}m)</span>
         </div>
       )}
 
-      {/* 24-HOUR REMINDER ENGINE BANNER */}
+      {/* NOTIFICATION PROXIMITY BANNER */}
       {activeNotifications.length > 0 && (
         <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {activeNotifications.map((note, index) => (
@@ -217,7 +210,7 @@ export default function PawGuardDashboard() {
         </div>
       )}
 
-      {/* HEADER SECTION WITH TOP CORNER CORNER PROFILE PLATFORM */}
+      {/* SYSTEM HEADER BAR WITH CORNER SETTINGS DEPLOYMENT */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1.5rem', position: 'relative' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -232,7 +225,7 @@ export default function PawGuardDashboard() {
           </div>
         </div>
 
-        {/* TOP CORNER PROFILE SETUP */}
+        {/* PROFILE CONTROL */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981' }}></span>
@@ -251,7 +244,7 @@ export default function PawGuardDashboard() {
             <Settings size={14} color="#71717a" style={{ marginLeft: '0.25rem' }} />
           </div>
 
-          {/* DYNAMIC PROFILE DROPDOWN MODIFIER */}
+          {/* DROP MODIFIER CONTAINER */}
           {isProfileOpen && (
             <div style={{ position: 'absolute', top: '120%', right: 0, backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '16px', padding: '1.25rem', width: '260px', zIndex: 100, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -278,13 +271,11 @@ export default function PawGuardDashboard() {
         </div>
       </header>
 
-      {/* THREE COLUMN ARCHITECTURE */}
+      {/* BODY PANEL BLOCKS */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '2rem' }}>
         
-        {/* BLOCK 1: EDGE MIC HUB & DIGITAL DOCUMENT VAULT */}
+        {/* COLUMN 1 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          
-          {/* DIGITAL MICROPHONE CONSOLE BLOCK (Tagline Removed) */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: '#a1a1aa', letterSpacing: '0.08em', display: 'block', marginBottom: '1.5rem' }}>
               INMP441 I2S Microphone
@@ -304,7 +295,7 @@ export default function PawGuardDashboard() {
             </div>
           </div>
 
-          {/* MEDICAL DOCUMENT STORAGE VAULT */}
+          {/* MEDICAL RECORDS VAULT WITH EMBEDDED TAB ACTIONS */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <FileText size={16} color="#3B82F6" /> Medical Document Center
@@ -313,8 +304,6 @@ export default function PawGuardDashboard() {
             <div 
               onClick={() => fileInputRef.current?.click()}
               style={{ border: '2px dashed #27272a', borderRadius: '12px', padding: '1rem', textAlign: 'center', cursor: 'pointer', backgroundColor: '#18181b', transition: 'border-color 0.2s', marginBottom: '1rem' }}
-              onMouseEnter={(e) => e.currentTarget.style.borderColor = '#10B981'}
-              onMouseLeave={(e) => e.currentTarget.style.borderColor = '#27272a'}
             >
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf,.png,.jpg,.jpeg,.doc" />
               <UploadCloud size={22} color="#71717a" style={{ margin: '0 auto 0.5rem auto', display: 'block' }} />
@@ -329,19 +318,16 @@ export default function PawGuardDashboard() {
                 <div 
                   key={doc.id} 
                   onClick={() => window.open(doc.fileUrl, '_blank')}
-                  title="Click to view file"
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', border: '1px solid #27272a', cursor: 'pointer', transition: 'background-color 0.15s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1f1f23'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#18181b'}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', border: '1px solid #27272a', cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
-                    <FileText size={16} color="#3B82F6" style={{ flexShrink: 0 }} />
+                    <FileText size={16} color="#3B82F6" />
                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>{doc.name}</div>
                       <div style={{ fontSize: '0.65rem', color: '#71717a' }}>{doc.size} • Added {doc.dateAdded}</div>
                     </div>
                   </div>
-                  <button onClick={(e) => handleDeleteDoc(doc.id, e)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.25rem', display: 'flex', alignItems: 'center' }}>
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id, e); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -350,10 +336,8 @@ export default function PawGuardDashboard() {
           </div>
         </div>
 
-        {/* BLOCK 2: INTERIOR TELEMETRY & HARDWARE MATRIX */}
+        {/* COLUMN 2 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          
-          {/* SIMULATOR GEOFENCE SLIDER CONTROL CONFIGURATION */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Heart size={14} color="#EF4444" /> Smart Collar Analytics
@@ -370,7 +354,6 @@ export default function PawGuardDashboard() {
               </div>
             </div>
 
-            {/* Adjustable Geofence Threshold Slider */}
             <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '12px', border: '1px solid #27272a' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
                 <span style={{ color: '#a1a1aa', fontWeight: 600 }}>Set Safe Radius Limit</span>
@@ -382,12 +365,11 @@ export default function PawGuardDashboard() {
                 max="200" 
                 value={allowedRadius} 
                 onChange={(e) => setAllowedRadius(Number(e.target.value))} 
-                style={{ width: '100%', accentColor: '#10B981', cursor: 'pointer' }} 
+                style={{ width: '100%', accentColor: '#10B981' }} 
               />
             </div>
           </div>
 
-          {/* SIMULATOR CENTRAL ENVIRONMENTAL MODULE READOUTS */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Activity size={14} color="#10B981" /> Central Module Sensors
@@ -416,7 +398,7 @@ export default function PawGuardDashboard() {
                   {isGeofenceBreached ? <DoorOpen color="#EF4444" size={20} /> : <DoorClosed color="#10B981" size={20} />}
                   <div>
                     <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Boundary Assessment</div>
-                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Real-time spatial geofence calculation</div>
+                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Spatial geofence calculation loop</div>
                   </div>
                 </div>
                 <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.25rem 0.6rem', borderRadius: '6px', backgroundColor: isGeofenceBreached ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: isGeofenceBreached ? '#EF4444' : '#10B981' }}>
@@ -427,16 +409,14 @@ export default function PawGuardDashboard() {
           </div>
         </div>
 
-        {/* BLOCK 3: ANALYTICAL RECHART PLOTS & SCROLL TIMELINES */}
+        {/* COLUMN 3 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-          
-          {/* WELLNESS CARD INDEX (Fonts scale automatically dynamically) */}
           <div style={{ background: 'linear-gradient(135deg, #18181b 0%, #09090b 100%)', borderRadius: '20px', border: '1px solid #3f3f46', padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
                 <Award size={16} color="#F59E0B" /> Wellness Index Card
               </h3>
-              <span style={{ fontSize: '0.7rem', color: '#a1a1aa', fontWeight: 500 }}>Acoustic Stress Index</span>
+              <span style={{ fontSize: '0.7rem', color: '#a1a1aa', fontWeight: 500 }}>Live Assessment</span>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', margin: '0.5rem 0' }}>
@@ -447,7 +427,7 @@ export default function PawGuardDashboard() {
               </div>
               <div style={{ flex: 1 }}>
                 <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: getStatusColor(currentSound, stressScore) }}>
-                  {isGeofenceBreached ? 'Critical Geofence Breach' : stressScore === 'HIGH' ? 'Distressed Warning' : 'Optimal Standing'}
+                  {isGeofenceBreached ? 'Critical Boundary Breach' : stressScore === 'HIGH' ? 'Distressed Warning' : 'Optimal Standing'}
                 </h4>
                 <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.72rem', color: '#a1a1aa', lineHeight: '1.3' }}>
                   Acoustic profile: <span style={{ color: getStatusColor(currentSound, stressScore), fontWeight: 'bold' }}>{currentSound} ({stressScore} STRESS)</span>
@@ -456,7 +436,6 @@ export default function PawGuardDashboard() {
             </div>
           </div>
 
-          {/* VACCINE & VET REMINDER REGISTRY */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
@@ -493,7 +472,6 @@ export default function PawGuardDashboard() {
             </div>
           </div>
 
-          {/* HISTORICAL MICRO-ACOUSTICS CHANNELS */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Volume2 size={15} color="#E4E4E7" /> Historical Micro-Acoustics
@@ -522,13 +500,13 @@ export default function PawGuardDashboard() {
 
       </div>
 
-      {/* SCHEDULE INTERFACE CREATOR MODAL OVERLAY */}
+      {/* MODAL WINDOW */}
       {isModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '20px', padding: '2rem', width: '100%', maxWidth: '420px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.5)' }}>
+          <div style={{ backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '20px', padding: '2rem', width: '100%', maxWidth: '420px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
               <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Create New Schedule</h3>
-              <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+              <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}>
                 <X size={18} />
               </button>
             </div>
@@ -542,7 +520,7 @@ export default function PawGuardDashboard() {
                   onChange={(e) => setNewTitle(e.target.value)} 
                   placeholder="e.g., Annual Rabies Shot"
                   required
-                  style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', outline: 'none' }}
+                  style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem' }}
                 />
               </div>
 
@@ -551,7 +529,7 @@ export default function PawGuardDashboard() {
                 <select 
                   value={newType} 
                   onChange={(e) => setNewType(e.target.value)}
-                  style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', outline: 'none', cursor: 'pointer' }}
+                  style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem' }}
                 >
                   <option value="Vaccine">Vaccine</option>
                   <option value="Vet Visit">Vet Visit</option>
@@ -568,7 +546,7 @@ export default function PawGuardDashboard() {
                     value={newDate} 
                     onChange={(e) => setNewDate(e.target.value)} 
                     required
-                    style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', outline: 'none', colorScheme: 'dark', cursor: 'pointer' }}
+                    style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', colorScheme: 'dark' }}
                   />
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -578,14 +556,14 @@ export default function PawGuardDashboard() {
                     value={newTime} 
                     onChange={(e) => setNewTime(e.target.value)} 
                     required
-                    style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', outline: 'none', colorScheme: 'dark', cursor: 'pointer' }}
+                    style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', colorScheme: 'dark' }}
                   />
                 </div>
               </div>
 
               <button 
                 type="submit"
-                style={{ backgroundColor: '#10B981', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.75rem', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', marginTop: '0.5rem' }}
+                style={{ backgroundColor: '#10B981', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.75rem', fontSize: '0.85rem', fontWeight: 700 }}
               >
                 Save Appointment Schedule
               </button>
