@@ -3,25 +3,22 @@ import json
 import random
 import requests
 
-API_URL = "http://192.168.1.11:3000/api/telemetry"
+# 1. FIXED: Pointing to your live production endpoint instead of a local IP
+API_URL = "https://pawguard-enterprise.vercel.app/api/telemetry"
 
-# Persistent state trackers
 bark_count = 0
 whine_count = 0
 growl_count = 0
 is_runaway = False
 
-# The classification categories our TinyML model outputs
 SOUND_CLASSES = ["Silence", "Background Noise", "Human Speech", "Bark", "Whine", "Growl"]
 
 def generate_telemetry():
     global bark_count, whine_count, growl_count, is_runaway
     
-    # 1. Base Environment Telemetry
     room_temp = round(random.uniform(22.0, 26.5), 1)
     lux = random.randint(400, 550) 
     
-    # Defaults for a calm, safe pet
     activity_level = "Normal"
     movement_score = random.randint(15, 45)
     stress_score = "LOW"
@@ -30,16 +27,13 @@ def generate_telemetry():
     distance_from_hub = round(random.uniform(0.5, 12.0), 1)
     geofence_alert = "SAFE"
     
-    # Default Audio Inference outputting baseline environment sound
     tinyml_classification = random.choice(["Silence", "Background Noise"])
     inference_confidence = round(random.uniform(0.85, 0.99), 2)
     
-    # 2. Inject Random Runaway Event (2% chance)
     if not is_runaway and random.random() < 0.02:
         is_runaway = True
         print("\n🚨 [SIMULATOR CRITICAL] Geofence Breach Detected!")
 
-    # 3. Handle Active States
     if is_runaway:
         activity_level = "Running"
         movement_score = random.randint(90, 100)
@@ -49,7 +43,6 @@ def generate_telemetry():
         distance_from_hub = round(random.uniform(150.0, 800.0), 1) 
         geofence_alert = "BREACHED"
         
-        # When running away, the audio model will highly likely hear Whines or heavy Barks
         tinyml_classification = random.choice(["Bark", "Whine"])
         inference_confidence = round(random.uniform(0.75, 0.96), 2)
         if tinyml_classification == "Bark": bark_count += 1
@@ -60,10 +53,8 @@ def generate_telemetry():
             print("\n💚 [SIMULATOR EVENT] Pet has been safely recovered.")
             
     else:
-        # Standard mood/acoustic shifts if home safe (15% event chance)
         rand_event = random.random()
         if rand_event < 0.05:
-            # Playful / Guarding Event -> Barking
             activity_level = "Restless"
             movement_score = random.randint(70, 90)
             tinyml_classification = "Bark"
@@ -74,7 +65,6 @@ def generate_telemetry():
             print(f"\n🔊 [TinyML Inference] Class: BARK ({int(inference_confidence*100)}% Match)")
             
         elif rand_event < 0.10:
-            # Separation Anxious / Distress Event -> Whining
             activity_level = "Isolating"
             movement_score = random.randint(5, 15)
             tinyml_classification = "Whine"
@@ -86,7 +76,6 @@ def generate_telemetry():
             print(f"\n🔊 [TinyML Inference] Class: WHINE ({int(inference_confidence*100)}% Match)")
             
         elif rand_event < 0.15:
-            # Warning/Defensive Event -> Growling
             activity_level = "Alert"
             movement_score = random.randint(40, 65)
             tinyml_classification = "Growl"
@@ -97,7 +86,6 @@ def generate_telemetry():
             print(f"\n🔊 [TinyML Inference] Class: GROWL ({int(inference_confidence*100)}% Match)")
             
         elif random.random() < 0.03:
-            # Human Interaction event
             tinyml_classification = "Human Speech"
             inference_confidence = round(random.uniform(0.88, 0.98), 2)
             print(f"\n🗣️ [TinyML Inference] Class: HUMAN SPEECH ({int(inference_confidence*100)}% Match)")
@@ -138,19 +126,25 @@ def generate_telemetry():
     return payload
 
 print("🚀 PawGuard TinyML Smart-Acoustic Simulator Booted.")
-print(f"Listening to digital I2S stream on channel '{API_URL}'...\n")
+print(f"Listening to digital I2S stream channel on target URL: '{API_URL}'...\n")
+
+# 2. FIXED: Included missing custom security verification headers required by your API route
+HEADERS = {
+    "Content-Type": "application/json",
+    "x-api-key": "PawGuard_2026_171006" # Matches HARDWARE_SECRET_KEY
+}
 
 try:
     while True:
         data = generate_telemetry()
         try:
-            response = requests.post(API_URL, json=data, timeout=4)
+            response = requests.post(API_URL, json=data, headers=HEADERS, timeout=4)
             if response.status_code == 200:
                 print(f"📡 Transmission Sent [200 OK] | Audio State: {data['audio_analytics']['detected_classification']}")
             else:
-                print(f"⚠️ Server Response Error: {response.status_code}")
-        except requests.exceptions.RequestException:
-            print(f"❌ Next.js server offline. Ensure 'npm run dev' is running.")
+                print(f"⚠️ Server Response Error: {response.status_code} | {response.text}")
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Next.js cloud server unreachable: {e}")
 
         time.sleep(5)
 except KeyboardInterrupt:
