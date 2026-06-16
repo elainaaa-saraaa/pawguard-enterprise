@@ -3,9 +3,9 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@vercel/kv';
 
-// Initialize the KV client manually using the exact storage environment configuration variables injected by your Redis Cloud setup
+// Handles Upstash's default REDIS_URL or Vercel's legacy KV variables perfectly
 const kv = createClient({
-  url: process.env.STORAGE_URL || process.env.KV_URL || '',
+  url: process.env.REDIS_URL || process.env.STORAGE_URL || process.env.KV_URL || '',
   token: process.env.STORAGE_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || '',
 });
 
