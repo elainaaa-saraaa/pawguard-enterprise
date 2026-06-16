@@ -30,11 +30,12 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
 
-  } catch (error: any) {
-    // Return the REAL error text
+} catch (error: any) {
+    // This logs the real error to your Vercel logs and sends it back to you
+    console.error("DEBUG ERROR:", error);
     return NextResponse.json({ 
       success: false, 
-      error: "!!! IF YOU SEE THIS, THE CODE UPDATED !!!" 
+      error: error.message || "Unknown error occurred" 
     }, { status: 500 });
   }
 }
