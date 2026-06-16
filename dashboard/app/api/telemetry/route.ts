@@ -1,13 +1,14 @@
 import { Redis } from '@upstash/redis';
 import { NextResponse } from 'next/server';
 
-// Updated to explicitly accept both uppercase and lowercase API key headers across all browsers
+// This configuration explicitly allows cross-origin requests and custom API headers
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, X-API-KEY, x-api-key',
 };
 
+// 1. Handles the browser's security handshake (Preflight)
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
@@ -15,11 +16,12 @@ export async function OPTIONS() {
   });
 }
 
+// 2. Handles pulling data from Upstash Redis to show on your Homepage
 export async function GET() {
   try {
     if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
       return NextResponse.json(
-        { success: false, error: "Database configuration variables missing on Vercel." },
+        { success: false, error: "Database environmental variables missing on Vercel." },
         { status: 500, headers: corsHeaders }
       );
     }
@@ -44,6 +46,7 @@ export async function GET() {
   }
 }
 
+// 3. Handles incoming hardware events
 export async function POST(req: Request) {
   const authHeader = req.headers.get('x-api-key');
   if (authHeader !== process.env.HARDWARE_SECRET_KEY) {
@@ -56,7 +59,7 @@ export async function POST(req: Request) {
   try {
     if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
       return NextResponse.json(
-        { success: false, error: "Database configuration variables missing on Vercel." },
+        { success: false, error: "Database environmental variables missing on Vercel." },
         { status: 500, headers: corsHeaders }
       );
     }
@@ -77,6 +80,7 @@ export async function POST(req: Request) {
       token: process.env.UPSTASH_REDIS_REST_TOKEN,
     });
 
+    // Save payload alongside a freshly generated generation timestamp
     await redis.set('pawguard_data', JSON.stringify({
       ...body,
       timestamp: new Date().toISOString()
