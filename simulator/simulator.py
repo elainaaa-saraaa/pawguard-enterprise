@@ -3,7 +3,7 @@ import json
 import random
 import requests
 
-API_URL = "http://localhost:3000/api/telemetry"
+API_URL = "http://192.168.1.11:3000/api/telemetry"
 
 # Persistent state trackers
 bark_count = 0

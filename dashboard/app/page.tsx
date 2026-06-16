@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { Shield, Flame, Activity, Volume2, CloudLightning, MessageSquare, AlertTriangle } from 'lucide-react';
+import { Shield, Flame, Activity, Volume2, MessageSquare } from 'lucide-react';
 
 export default function Home() {
   const [liveMetrics, setLiveMetrics] = useState<any>(null);
@@ -10,7 +10,16 @@ export default function Home() {
   useEffect(() => {
     const checkLocalStream = async () => {
       try {
-        const res = await fetch('/api/telemetry');
+        // Fetch the local relative path layout engine link with cache busting parameters
+        const res = await fetch('/api/telemetry', { 
+          cache: 'no-store',
+          next: { revalidate: 0 },
+          headers: {
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache'
+          }
+        });
+        
         if (res.ok) {
           const data = await res.json();
           if (data && data.length > 0) {
@@ -19,10 +28,11 @@ export default function Home() {
           }
         }
       } catch (err) {
-        console.log("Waiting for local data tick...");
+        console.log("Waiting for data sync...");
       }
     };
 
+    // Poll the stream database array every 1 second
     const localInterval = setInterval(checkLocalStream, 1000);
     return () => clearInterval(localInterval);
   }, []);
@@ -33,7 +43,6 @@ export default function Home() {
   const currentSoundClass = liveMetrics?.audio_analytics?.detected_classification || 'Silence';
   const soundConfidence = liveMetrics?.audio_analytics?.inference_confidence_pct || 0;
 
-  // Visual highlights for critical acoustic tracking
   const isVocalizationAlert = ['Bark', 'Whine', 'Growl'].includes(currentSoundClass);
   
   const accentColor = isBreached ? 'text-red-500' : (isHighStress ? 'text-amber-500' : 'text-emerald-400');
@@ -106,7 +115,7 @@ export default function Home() {
               <div>
                 <p className="text-xs text-slate-500 font-medium">Collar LED Status</p>
                 <span className={`inline-block px-2.5 py-0.5 rounded text-xxs font-bold uppercase tracking-wider mt-1.5 border
-                  ${isBreached || liveMetrics?.collar_metrics?.led_status === 'RED' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
+                  ${isBreached || liveMetrics?.collar_metrics?.led_status === 'RED' || liveMetrics?.collar_metrics?.led_status === 'FLASHING_RED' ? 'bg-red-500/10 text-red-400 border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'}`}>
                   {liveMetrics?.collar_metrics?.led_status || 'OFFLINE'}
                 </span>
               </div>
@@ -117,7 +126,7 @@ export default function Home() {
             </div>
           </div>
 
-          {/* TINYML LIVE ACCOUSTIC INFERENCE PANEL */}
+          {/* TINYML LIVE ACOUSTIC INFERENCE PANEL */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             
             <div className={`p-5 border rounded-xl transition-all duration-300 ${isVocalizationAlert ? 'bg-amber-950/20 border-amber-500/40' : 'bg-slate-900/30 border-slate-900'}`}>
@@ -170,7 +179,7 @@ export default function Home() {
               return (
                 <div key={log.id || index} className={`p-3 border rounded-lg text-xs space-y-1 bg-slate-900/60 ${alertLog ? 'border-amber-500/30 bg-amber-950/5' : 'border-slate-900'}`}>
                   <div className="flex justify-between items-center text-slate-500 text-xxs font-mono">
-                    <span>REF: #{log.id ? String(log.id).slice(-4) : 'DSP'}</span>
+                    <span>REF: #{log.device_info?.hub_id ? String(log.device_info.hub_id).slice(-4) : 'DSP'}</span>
                     <span>{new Date(log.timestamp * 1000).toLocaleTimeString()}</span>
                   </div>
                   <div className="flex justify-between items-center pt-0.5">
