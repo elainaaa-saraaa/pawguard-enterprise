@@ -158,10 +158,11 @@ export default function PawGuardDashboard() {
   const currentSound = telemetry?.audio_analytics?.detected_classification || telemetry?.audio_analytics?.classified_sound || 'SILENCE';
   const confidenceScore = telemetry?.audio_analytics?.inference_confidence_pct ?? telemetry?.audio_analytics?.confidence ?? 100;
   
-  const roomTemp = telemetry?.environment?.temperature_c ?? telemetry?.central_module?.room_temp ?? telemetry?.environment?.room_temp ?? '--';
-  const lightLevel = telemetry?.environment?.ambient_light_lux ?? telemetry?.central_module?.light_lux ?? telemetry?.environment?.light_lux ?? '--';
+  // FIXED: Explicitly grouped nullish values inside parens to resolve Turbopack compiler error
+  const roomTemp = (telemetry?.environment?.temperature_c ?? telemetry?.central_module?.room_temp ?? telemetry?.environment?.room_temp) ?? '--';
+  const lightLevel = (telemetry?.environment?.ambient_light_lux ?? telemetry?.central_module?.light_lux ?? telemetry?.environment?.light_lux) ?? '--';
 
-  const movement = telemetry?.collar_metrics?.activity_state ?? telemetry?.collar?.movement_activity || 'STATIONARY';
+  const movement = (telemetry?.collar_metrics?.activity_state ?? telemetry?.collar?.movement_activity) || 'STATIONARY';
   const distance = telemetry?.collar_metrics?.distance_from_hub_meters ?? telemetry?.edge_analytics?.distance_meters ?? 0;
   const stressScore = telemetry?.edge_analytics?.stress_level || 'LOW';
   const lastSyncTime = telemetry?.timestamp ? new Date(telemetry.timestamp * 1000).toLocaleTimeString() : '--:--:--';
