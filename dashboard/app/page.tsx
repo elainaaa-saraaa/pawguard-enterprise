@@ -1,9 +1,27 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { 
+  Activity, Shield, Thermometer, Sun, DoorOpen, DoorClosed, 
+  Volume2, Wind, Utensils, Bell, Heart, Calendar, Award, 
+  Sparkles, CheckCircle, Clock
+} from 'lucide-react';
 
 export default function PawGuardDashboard() {
   const [telemetry, setTelemetry] = useState<any>(null);
   const [packetHistory, setPacketHistory] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  
+  // Interface Control Overrides (Simulated Actuators)
+  const [fanOn, setFanOn] = useState<boolean>(false);
+  const [acOn, setAcOn] = useState<boolean>(false);
+  const [dispenseSuccess, setDispenseSuccess] = useState<boolean>(false);
+
+  // Vaccine and Appointment Reminder Registry
+  const [reminders, setReminders] = useState([
+    { id: 1, title: "Rabies Booster Shot", date: "2026-07-12", type: "Vaccine", completed: false },
+    { id: 2, title: "Routine Vet Checkup", date: "2026-08-05", type: "Vet Visit", completed: false },
+    { id: 3, title: "Deworming Preventative", date: "2026-06-25", type: "Medication", completed: true },
+  ]);
 
   const fetchTelemetry = async () => {
     try {
@@ -13,8 +31,17 @@ export default function PawGuardDashboard() {
         const data = typeof result.telemetry === 'string' ? JSON.parse(result.telemetry) : result.telemetry;
         setTelemetry(data);
         if (result.history) setPacketHistory(result.history);
+        
+        // Sync static triggers to match external physical stream values if initialized
+        if (data.central_module) {
+          if (data.central_module.fan_status !== undefined) setFanOn(!!data.central_module.fan_status);
+          if (data.central_module.ac_status !== undefined) setAcOn(!!data.central_module.ac_status);
+        }
+        setIsLoading(false);
       }
-    } catch (e) { console.error('Polling error', e); }
+    } catch (e) { 
+      console.error("Failed to establish stream synchronization:", e); 
+    }
   };
 
   useEffect(() => {
@@ -23,74 +50,296 @@ export default function PawGuardDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Logic Mappings
-  const soundLabel = telemetry?.audio_analytics?.classified_sound || 'SILENCE';
-  const confidence = telemetry?.audio_analytics?.model_confidence_pct ?? 0;
-  const roomTemp = telemetry?.environment?.room_temp ?? '---';
-  const doorStatus = telemetry?.environment?.door_open ? 'OPEN' : 'CLOSED';
-  const lightLevel = telemetry?.environment?.light_lux ?? '---';
-  
-  const getStatusColor = (sound: string) => {
-    if (sound === 'BARK') return '#ef4444';
-    if (sound === 'WHINE' || sound === 'GROWL') return '#f97316';
-    return '#00df89';
+  const triggerDispenser = () => {
+    setDispenseSuccess(true);
+    setTimeout(() => setDispenseSuccess(false), 3000);
   };
 
+  const toggleReminder = (id: number) => {
+    setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r));
+  };
+
+  // Safe Parameter Extractors with Explicit Fallbacks
+  const currentSound = telemetry?.audio_analytics?.classified_sound || 'SILENCE';
+  const confidenceScore = telemetry?.audio_analytics?.confidence ?? 100;
+  
+  const collarTemp = telemetry?.collar?.body_temp ?? '--';
+  const movement = telemetry?.collar?.movement_activity || 'STATIONARY';
+  const collarNoise = telemetry?.collar?.noise_level_db ?? '--';
+
+  const roomTemp = telemetry?.central_module?.room_temp ?? telemetry?.environment?.room_temp ?? '--';
+  const lightLevel = telemetry?.central_module?.light_lux ?? telemetry?.environment?.light_lux ?? '--';
+  const isDoorOpen = telemetry?.central_module?.door_open ?? telemetry?.environment?.door_open ?? false;
+
+  const getStatusColor = (sound: string) => {
+    switch (sound.toUpperCase()) {
+      case 'BARK': return '#EF4444'; 
+      case 'GROWL':
+      case 'WHINE': return '#F59E0B'; 
+      case 'HUMAN SPEECH': return '#3B82F6'; 
+      default: return '#10B981'; 
+    }
+  };
+
+  // Dynamic Clinical Health Score Generator
+  const calculateHealthScore = () => {
+    let score = 100;
+    if (currentSound === 'BARK' || currentSound === 'GROWL') score -= 12;
+    if (Number(collarTemp) > 39.2 || Number(collarTemp) < 37.8) score -= 15;
+    if (Number(collarNoise) > 75) score -= 8;
+    return Math.max(score, 45);
+  };
+
+  const healthScore = calculateHealthScore();
+
   return (
-    <div style={{ padding: '2.5rem', fontFamily: 'system-ui, sans-serif', backgroundColor: '#060b13', color: '#f8fafc', minHeight: '100vh' }}>
+    <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '2.5rem' }}>
       
-      {/* HEADER */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem' }}>
+      {/* GLOBAL SYSTEM BRAND HEADER */}
+      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.6rem', fontWeight: 'bold', margin: 0 }}>PawGuard <span style={{ color: '#00df89' }}>Enterprise</span></h1>
-          <p style={{ color: '#475569', fontSize: '0.85rem' }}>Continuous Intelligent Pet Health Monitoring Platform</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <Shield size={26} color="#10B981" />
+            <h1 style={{ fontSize: '1.65rem', fontWeight: 800, letterSpacing: '-0.03em', margin: 0 }}>
+              PawGuard <span style={{ color: '#10B981', fontWeight: 400 }}>Enterprise</span>
+            </h1>
+          </div>
+          <p style={{ color: '#a1a1aa', fontSize: '0.85rem', margin: '0.35rem 0 0 0' }}>Edge-ML Array & Automated Environmental Hub</p>
         </div>
-        <div style={{ backgroundColor: '#0a111c', padding: '0.5rem 1.2rem', borderRadius: '50px', border: '1px solid #141f32', fontSize: '0.8rem', color: '#94a3b8' }}>
-          HUB ID: PG-HUB-00192X (ONLINE)
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1.25rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
+          <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981', display: 'inline-block' }}></span>
+          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#e4e4e7' }}>
+            {isLoading ? 'Establishing Uplink...' : 'Live Nodes Connected'}
+          </span>
         </div>
       </header>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2.1fr 1fr', gap: '2rem' }}>
+      {/* THREE COLUMN ARCHITECTURE */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '2rem' }}>
         
-        {/* LEFT COLUMN: WELL-BEING & ENVIRONMENTS */}
+        {/* BLOCK 1: EDGE COMPUTING & INTERACTIVE SWITCHES */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
-          <div style={{ backgroundColor: '#0a111c', padding: '2.2rem', borderRadius: '12px', border: '1px solid #141f32' }}>
-            <h3 style={{ color: '#475569', fontSize: '0.75rem', textTransform: 'uppercase', marginBottom: '1.5rem' }}>CURRENT WELL-BEING INDEX</h3>
-            <h1 style={{ fontSize: '4rem', fontWeight: '900', color: getStatusColor(soundLabel), margin: 0 }}>{soundLabel}</h1>
-            <p style={{ color: '#94a3b8', fontSize: '1.1rem' }}>Model Confidence: {confidence}%</p>
+          {/* DIGITAL MICROPHONE ARRAY UNIT */}
+          <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: '#a1a1aa', letterSpacing: '0.08em' }}>INMP441 I2S Microphone</span>
+              <div style={{ backgroundColor: 'rgba(59, 130, 246, 0.1)', color: '#3B82F6', padding: '0.2rem 0.5rem', borderRadius: '6px', fontSize: '0.7rem', fontWeight: 700 }}>
+                TinyML Pipeline
+              </div>
+            </div>
             
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginTop: '2.5rem' }}>
-              <div style={{ backgroundColor: '#060b13', padding: '1rem', borderRadius: '8px' }}>
-                <p style={{ color: '#475569', fontSize: '0.7rem' }}>ROOM TEMP</p>
-                <h2 style={{ margin: 0 }}>{roomTemp}°C</h2>
+            <div style={{ margin: '0.5rem 0' }}>
+              <span style={{ fontSize: '0.8rem', color: '#71717a' }}>Acoustic Classification</span>
+              <h2 style={{ fontSize: '3.2rem', fontWeight: 900, margin: '0.15rem 0', color: getStatusColor(currentSound), transition: 'color 0.2s ease', letterSpacing: '-0.02em' }}>
+                {currentSound}
+              </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.75rem' }}>
+                <div style={{ flex: 1, height: '5px', backgroundColor: '#27272a', borderRadius: '999px' }}>
+                  <div style={{ width: `${confidenceScore}%`, height: '100%', backgroundColor: getStatusColor(currentSound), borderRadius: '999px', transition: 'width 0.4s ease' }}></div>
+                </div>
+                <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#a1a1aa' }}>{confidenceScore}% Model Match</span>
               </div>
-              <div style={{ backgroundColor: '#060b13', padding: '1rem', borderRadius: '8px' }}>
-                <p style={{ color: '#475569', fontSize: '0.7rem' }}>DOOR STATUS</p>
-                <h2 style={{ margin: 0 }}>{doorStatus}</h2>
+            </div>
+          </div>
+
+          {/* SYSTEM ACTUATION TRIGGER CORES */}
+          <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Sparkles size={16} color="#3B82F6" /> Appliance Automation
+            </h3>
+            
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <Wind size={18} color={fanOn ? "#3B82F6" : "#52525b"} />
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Ventilation Fan</div>
+                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Auxiliary cooling relay</div>
+                  </div>
+                </div>
+                <button onClick={() => setFanOn(!fanOn)} style={{ backgroundColor: fanOn ? '#3B82F6' : '#27272a', color: '#fff', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', width: '55px' }}>
+                  {fanOn ? 'ON' : 'OFF'}
+                </button>
               </div>
-              <div style={{ backgroundColor: '#060b13', padding: '1rem', borderRadius: '8px' }}>
-                <p style={{ color: '#475569', fontSize: '0.7rem' }}>LIGHT LEVEL</p>
-                <h2 style={{ margin: 0 }}>{lightLevel} lux</h2>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <Thermometer size={18} color={acOn ? "#EF4444" : "#52525b"} />
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Air Conditioner</div>
+                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Climate thermostat logic</div>
+                  </div>
+                </div>
+                <button onClick={() => setAcOn(!acOn)} style={{ backgroundColor: acOn ? '#EF4444' : '#27272a', color: '#fff', border: 'none', padding: '0.4rem 0.85rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem', width: '55px' }}>
+                  {acOn ? 'ON' : 'OFF'}
+                </button>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem 1rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <Utensils size={18} color={dispenseSuccess ? "#10B981" : "#52525b"} />
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Food Dispenser</div>
+                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Servomotor weight calibration</div>
+                  </div>
+                </div>
+                <button onClick={triggerDispenser} style={{ backgroundColor: dispenseSuccess ? '#10B981' : '#18181b', color: dispenseSuccess ? '#fff' : '#e4e4e7', border: '1px solid #27272a', padding: '0.4rem 0.85rem', borderRadius: '8px', cursor: 'pointer', fontWeight: 700, fontSize: '0.75rem' }}>
+                  {dispenseSuccess ? 'RELEASED' : 'DISPENSE'}
+                </button>
               </div>
             </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: TIMESTAMPED FEED */}
-        <div style={{ backgroundColor: '#0a111c', padding: '1.75rem', borderRadius: '12px', border: '1px solid #141f32' }}>
-          <h3 style={{ color: '#94a3b8', fontSize: '0.75rem', textTransform: 'uppercase', marginBottom: '1rem' }}>🛡️ LIVE TELEMETRY FEED</h3>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-            {packetHistory.length > 0 ? packetHistory.map((p, i) => (
-              <div key={i} style={{ padding: '0.75rem', borderBottom: '1px solid #141f32', fontSize: '0.85rem' }}>
-                <span style={{ color: '#475569', marginRight: '0.5rem' }}>
-                  {new Date(p.timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                </span>
-                <strong style={{ color: '#38bdf8' }}>{p.audio_analytics?.classified_sound}</strong>
+        {/* BLOCK 2: BIOMETRICS & INTERIOR TELEMETRY */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          
+          {/* SMART BIOMETRIC COLLAR MODULE */}
+          <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Heart size={14} color="#EF4444" /> Smart Collar Array
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a' }}>
+                <div style={{ fontSize: '0.72rem', color: '#71717a' }}>Core Body Temp</div>
+                <div style={{ fontSize: '1.35rem', fontWeight: 800, marginTop: '0.25rem' }}>{collarTemp}°C</div>
               </div>
-            )) : <p style={{ color: '#475569' }}>Waiting for data...</p>}
+              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a' }}>
+                <div style={{ fontSize: '0.72rem', color: '#71717a' }}>IMU Activity State</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '0.5rem', color: '#3B82F6' }}>{movement}</div>
+              </div>
+              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a', gridColumn: 'span 2' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
+                  <span style={{ color: '#71717a' }}>Ambient Noise Amplitude</span>
+                  <span style={{ fontWeight: 600, color: '#f4f4f5' }}>{collarNoise} dB</span>
+                </div>
+                <div style={{ height: '6px', backgroundColor: '#27272a', borderRadius: '999px', marginTop: '0.5rem', overflow: 'hidden' }}>
+                  <div style={{ width: `${Math.min(Number(collarNoise || 0), 100)}%`, height: '100%', backgroundColor: '#F59E0B', borderRadius: '999px' }}></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* BASE STATION REGIONAL SENSORS */}
+          <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Activity size={14} color="#10B981" /> Central Module Sensors
+            </h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Thermometer color="#3B82F6" size={20} />
+                <div>
+                  <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Room Temp</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{roomTemp}°C</div>
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <Sun color="#F59E0B" size={20} />
+                <div>
+                  <div style={{ fontSize: '0.7_rem', color: '#71717a' }}>Light Lux</div>
+                  <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{lightLevel} lx</div>
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a', gridColumn: 'span 2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  {isDoorOpen ? <DoorOpen color="#EF4444" size={20} /> : <DoorClosed color="#10B981" size={20} />}
+                  <div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Access Portal Status</div>
+                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Magnetic contact sensor monitoring</div>
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.25rem 0.6rem', borderRadius: '6px', backgroundColor: isDoorOpen ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: isDoorOpen ? '#EF4444' : '#10B981' }}>
+                  {isDoorOpen ? 'OPEN' : 'SECURE'}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
+
+        {/* BLOCK 3: ANALYTICAL CLINIC REPORTS & TIMELINES */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+          
+          {/* ADVANCED HEALTH CALCULATOR GRAPHIC */}
+          <div style={{ background: 'linear-gradient(135deg, #18181b 0%, #09090b 100%)', borderRadius: '20px', border: '1px solid #3f3f46', padding: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+                <Award size={16} color="#F59E0B" /> Wellness Index Card
+              </h3>
+              <span style={{ fontSize: '0.7rem', color: '#a1a1aa', fontWeight: 500 }}>Real-time Node Assessment</span>
+            </div>
+            
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', margin: '0.5rem 0' }}>
+              <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '50%', background: `conic-gradient(#10B981 ${healthScore}%, #27272a 0)`, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ width: '52px', height: '52px', borderRadius: '50%', backgroundColor: '#141417', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.15rem', fontWeight: 800 }}>
+                  {healthScore}
+                </div>
+              </div>
+              <div style={{ flex: 1 }}>
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>
+                  {healthScore > 85 ? 'Optimal Standing' : healthScore > 65 ? 'Condition Normal' : 'Attention Urged'}
+                </h4>
+                <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.72rem', color: '#a1a1aa', lineHeight: '1.3' }}>
+                  Dynamically aggregated from ambient auditory profiles, stress alerts, and metabolic metrics.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* VACCINE & VET APPOINTMENT REGISTRY */}
+          <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
+            <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Calendar size={15} color="#A78BFA" /> Schedules & Reminders
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              {reminders.map((rem) => (
+                <div key={rem.id} style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', padding: '0.7rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', opacity: rem.completed ? 0.5 : 1, justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <div onClick={() => toggleReminder(rem.id)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                      {rem.completed ? <CheckCircle size={16} color="#10B981" /> : <Clock size={16} color="#71717a" />}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, textDecoration: rem.completed ? 'line-through' : 'none' }}>{rem.title}</div>
+                      <div style={{ fontSize: '0.68rem', color: '#71717a' }}>{rem.type} • {rem.date}</div>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => toggleReminder(rem.id)}
+                    style={{ background: 'none', border: '1px solid #27272a', color: rem.completed ? '#10B981' : '#a1a1aa', fontSize: '0.68rem', padding: '0.2rem 0.5rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                  >
+                    {rem.completed ? 'Done' : 'Mark'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* PREVIOUS RECORDED HISTORICAL LOG ENTRIES */}
+          <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Volume2 size={15} color="#E4E4E7" /> Historical Micro-Acoustics
+            </h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', maxHeight: '180px', flex: 1 }}>
+              {packetHistory.length > 0 ? packetHistory.map((p, i) => {
+                const sound = p.audio_analytics?.classified_sound || 'SILENCE';
+                return (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.55rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', borderLeft: `3px solid ${getStatusColor(sound)}` }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{sound}</div>
+                    <div style={{ fontSize: '0.68rem', color: '#71717a' }}>
+                      {p.timestamp ? new Date(p.timestamp).toLocaleTimeString() : 'Syncing Time...'}
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#71717a', fontSize: '0.75rem', padding: '2rem 0' }}>
+                  Awaiting edge node data stream chunks...
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+
       </div>
     </div>
   );
