@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { 
   Activity, Shield, Thermometer, Sun, DoorOpen, DoorClosed, 
   Volume2, Calendar, Heart, Award, CheckCircle, Clock, 
-  Plus, X, Bell, User, UploadCloud, FileText, Trash2, Camera, Settings
+  Plus, X, Bell, User, UploadCloud, FileText, Trash2, Settings, AlertTriangle
 } from 'lucide-react';
 
 interface Reminder {
@@ -20,7 +20,7 @@ interface MedicalDoc {
   name: string;
   size: string;
   dateAdded: string;
-  fileUrl: string; // Dynamic URL pointer to open files
+  fileUrl: string;
 }
 
 export default function PawGuardDashboard() {
@@ -35,6 +35,9 @@ export default function PawGuardDashboard() {
   const [petBreed, setPetBreed] = useState<string>('Golden Retriever');
   const [petPfp, setPetPfp] = useState<string>('https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=100');
   
+  // Geofence Dynamic Parameters
+  const [allowedRadius, setAllowedRadius] = useState<number>(15);
+
   // Document Management States
   const [isUploading, setIsUploading] = useState<boolean>(false);
   const [documents, setDocuments] = useState<MedicalDoc[]>([
@@ -77,7 +80,7 @@ export default function PawGuardDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Proximity notification tracker (Fires alert 24h before event)
+  // 24H Deadline Proximity Alert Checker
   useEffect(() => {
     const checkNotifications = () => {
       const now = new Date().getTime();
@@ -126,7 +129,6 @@ export default function PawGuardDashboard() {
     setIsModalOpen(false);
   };
 
-  // Document Upload Configuration
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -148,51 +150,62 @@ export default function PawGuardDashboard() {
   };
 
   const handleDeleteDoc = (id: number, e: React.MouseEvent) => {
-    e.stopPropagation(); // Avoid triggering open view mode on click
+    e.stopPropagation(); 
     setDocuments(prev => prev.filter(doc => doc.id !== id));
   };
 
-  // Fixed Structural Extractor logic matching your exact terminal payload keys
-  const currentSound = telemetry?.audio_analytics?.classified_sound || 'SILENCE';
-  const confidenceScore = telemetry?.audio_analytics?.confidence ?? 100;
+  // --- STRICT SIMULATOR PAYLOAD EXTRACTION LOGIC ---
+  const currentSound = telemetry?.audio_analytics?.detected_classification || telemetry?.audio_analytics?.classified_sound || 'SILENCE';
+  const confidenceScore = telemetry?.audio_analytics?.inference_confidence_pct ?? telemetry?.audio_analytics?.confidence ?? 100;
   
-  const collarTemp = telemetry?.collar?.body_temp !== undefined ? telemetry.collar.body_temp : '--';
-  const movement = telemetry?.collar?.movement_activity || 'STATIONARY';
-  const collarNoise = telemetry?.collar?.noise_level_db !== undefined ? telemetry.collar.noise_level_db : '--';
+  // Extracting from simulator's "environment" object block
+  const roomTemp = telemetry?.environment?.temperature_c ?? telemetry?.central_module?.room_temp ?? telemetry?.environment?.room_temp ?? '--';
+  const lightLevel = telemetry?.environment?.ambient_light_lux ?? telemetry?.central_module?.light_lux ?? telemetry?.environment?.light_lux ?? '--';
 
-  const roomTemp = telemetry?.central_module?.room_temp !== undefined 
-    ? telemetry.central_module.room_temp 
-    : (telemetry?.environment?.room_temp !== undefined ? telemetry.environment.room_temp : '--');
+  // Extracting from simulator's "collar_metrics" & "edge_analytics" object blocks
+  const movement = telemetry?.collar_metrics?.activity_state ?? telemetry?.collar?.movement_activity || 'STATIONARY';
+  const distance = telemetry?.collar_metrics?.distance_from_hub_meters ?? telemetry?.edge_analytics?.distance_meters ?? 0;
+  const stressScore = telemetry?.edge_analytics?.stress_level || 'LOW';
 
-  const lightLevel = telemetry?.central_module?.light_lux !== undefined 
-    ? telemetry.central_module.light_lux 
-    : (telemetry?.environment?.light_lux !== undefined ? telemetry.environment.light_lux : '--');
+  // Extracting data dynamically for Health Report Index computation
+  const collarNoise = telemetry?.audio_analytics?.historical_counts?.barks !== undefined ? "Active Logs" : '--';
+  const lastSyncTime = telemetry?.timestamp ? new Date(telemetry.timestamp * 1000).toLocaleTimeString() : '--:--:--';
 
-  const isDoorOpen = telemetry?.central_module?.door_open ?? telemetry?.environment?.door_open ?? false;
-  const lastSyncTime = telemetry?.timestamp ? new Date(telemetry.timestamp).toLocaleTimeString() : '--:--:--';
+  // Geofence alarm trigger flag evaluated against user preference radius bounds
+  const isGeofenceBreached = distance > allowedRadius;
 
-  const getStatusColor = (sound: string) => {
-    switch (sound.toUpperCase()) {
-      case 'BARK': return '#EF4444'; 
-      case 'GROWL':
-      case 'WHINE': return '#F59E0B'; 
-      case 'HUMAN SPEECH': return '#3B82F6'; 
-      default: return '#10B981'; 
+  // --- DYNAMIC FONT STYLE COLOR LOGIC ---
+  const getStatusColor = (sound: string, stress: string) => {
+    const cleanSound = sound.toUpperCase();
+    const cleanStress = stress.toUpperCase();
+
+    if (cleanSound === 'BARK' || cleanSound === 'GROWL' || cleanStress === 'HIGH' || isGeofenceBreached) {
+      return '#EF4444'; // Red Font -> Distressed/High Warning Status
     }
+    if (cleanSound === 'WHINE' || cleanSound === 'HUMAN SPEECH' || movement.toUpperCase() === 'RESTLESS') {
+      return '#F59E0B'; // Orange Font -> Anxious Alert Status
+    }
+    return '#10B981'; // Green Font -> Balanced / Normal Operation
   };
 
   const healthScore = (() => {
-    let score = 100;
-    if (currentSound === 'BARK' || currentSound === 'GROWL') score -= 12;
-    if (collarTemp !== '--' && (Number(collarTemp) > 39.2 || Number(collarTemp) < 37.8)) score -= 15;
-    if (collarNoise !== '--' && Number(collarNoise) > 75) score -= 8;
-    return Math.max(score, 45);
+    let score = telemetry?.edge_analytics?.comfort_score_pct ?? 100;
+    if (isGeofenceBreached) score = Math.min(score, 30);
+    return score;
   })();
 
   return (
     <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '2.5rem', position: 'relative' }}>
       
-      {/* 24-HOUR REMINDER MODULE DISPATCHER */}
+      {/* CRITICAL GEOFENCE ALARM BANNER */}
+      {isGeofenceBreached && (
+        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '2px solid #EF4444', padding: '1.25rem', borderRadius: '14px', color: '#FCA5A5', fontSize: '1rem', fontWeight: 800, letterSpacing: '0.02em' }}>
+          <AlertTriangle size={24} className="animate-bounce" color="#EF4444" />
+          <span>🚨 ALARM: GEOFENCE BREACH! Pet is {distance}m away (Max allowed: {allowedRadius}m)</span>
+        </div>
+      )}
+
+      {/* 24-HOUR REMINDER ENGINE BANNER */}
       {activeNotifications.length > 0 && (
         <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {activeNotifications.map((note, index) => (
@@ -208,9 +221,9 @@ export default function PawGuardDashboard() {
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1.5rem', position: 'relative' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            <Shield size={26} color="#10B981" />
+            <Shield size={26} color={getStatusColor(currentSound, stressScore)} />
             <h1 style={{ fontSize: '1.65rem', fontWeight: 800, letterSpacing: '-0.03em', margin: 0 }}>
-              PawGuard <span style={{ color: '#10B981', fontWeight: 400 }}>Enterprise</span>
+              PawGuard <span style={{ color: getStatusColor(currentSound, stressScore), fontWeight: 400 }}>Enterprise</span>
             </h1>
           </div>
           <p style={{ color: '#a1a1aa', fontSize: '0.85rem', margin: '0.35rem 0 0 0' }}>Edge-ML Array & Automated Environmental Hub</p>
@@ -219,19 +232,18 @@ export default function PawGuardDashboard() {
           </div>
         </div>
 
-        {/* PROFILE DESIGN PLACED ON THE EXTREME CORNER */}
+        {/* TOP CORNER PROFILE SETUP */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981' }}></span>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>Live Sync</span>
           </div>
 
-          {/* Interactive Profile Action Target */}
           <div 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
             style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', border: '1px solid #27272a', padding: '0.4rem 1rem', borderRadius: '14px', cursor: 'pointer', transition: 'background-color 0.2s' }}
           >
-            <img src={petPfp} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #10B981' }} />
+            <img src={petPfp} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: `1px solid ${getStatusColor(currentSound, stressScore)}` }} />
             <div style={{ textAlign: 'left' }}>
               <div style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5' }}>{petName}</div>
               <div style={{ fontSize: '0.65rem', color: '#71717a' }}>{petBreed}</div>
@@ -239,7 +251,7 @@ export default function PawGuardDashboard() {
             <Settings size={14} color="#71717a" style={{ marginLeft: '0.25rem' }} />
           </div>
 
-          {/* EXTENDED CORNER CONFIGURATION WINDOW DROPDOWN */}
+          {/* DYNAMIC PROFILE DROPDOWN MODIFIER */}
           {isProfileOpen && (
             <div style={{ position: 'absolute', top: '120%', right: 0, backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '16px', padding: '1.25rem', width: '260px', zIndex: 100, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -249,7 +261,7 @@ export default function PawGuardDashboard() {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Avatar Photo Link</label>
+                  <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Avatar Photo URL</label>
                   <input type="text" value={petPfp} onChange={(e) => setPetPfp(e.target.value)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
                 </div>
                 <div>
@@ -280,25 +292,24 @@ export default function PawGuardDashboard() {
             
             <div style={{ margin: '0.5rem 0' }}>
               <span style={{ fontSize: '0.8rem', color: '#71717a' }}>Acoustic Classification</span>
-              <h2 style={{ fontSize: '3.2rem', fontWeight: 900, margin: '0.15rem 0', color: getStatusColor(currentSound), transition: 'color 0.2s ease', letterSpacing: '-0.02em' }}>
+              <h2 style={{ fontSize: '3.2rem', fontWeight: 900, margin: '0.15rem 0', color: getStatusColor(currentSound, stressScore), transition: 'color 0.2s ease', letterSpacing: '-0.02em' }}>
                 {currentSound}
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.75rem' }}>
                 <div style={{ flex: 1, height: '5px', backgroundColor: '#27272a', borderRadius: '999px' }}>
-                  <div style={{ width: `${confidenceScore}%`, height: '100%', backgroundColor: getStatusColor(currentSound), borderRadius: '999px', transition: 'width 0.4s ease' }}></div>
+                  <div style={{ width: `${confidenceScore}%`, height: '100%', backgroundColor: getStatusColor(currentSound, stressScore), borderRadius: '999px', transition: 'width 0.4s ease' }}></div>
                 </div>
                 <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#a1a1aa' }}>{confidenceScore}% Match</span>
               </div>
             </div>
           </div>
 
-          {/* DYNAMIC FILE CLINIC STORAGE COMPONENT */}
+          {/* MEDICAL DOCUMENT STORAGE VAULT */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <FileText size={16} color="#3B82F6" /> Medical Document Center
             </h3>
 
-            {/* Document Trigger Upload Area */}
             <div 
               onClick={() => fileInputRef.current?.click()}
               style={{ border: '2px dashed #27272a', borderRadius: '12px', padding: '1rem', textAlign: 'center', cursor: 'pointer', backgroundColor: '#18181b', transition: 'border-color 0.2s', marginBottom: '1rem' }}
@@ -313,7 +324,6 @@ export default function PawGuardDashboard() {
               <span style={{ fontSize: '0.65rem', color: '#71717a', display: 'block', marginTop: '0.15rem' }}>PDF, Doc or Images</span>
             </div>
 
-            {/* Uploaded Documents List */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxHeight: '150px', overflowY: 'auto' }}>
               {documents.map((doc) => (
                 <div 
@@ -340,36 +350,44 @@ export default function PawGuardDashboard() {
           </div>
         </div>
 
-        {/* BLOCK 2: BIOMETRICS & INTERIOR TELEMETRY */}
+        {/* BLOCK 2: INTERIOR TELEMETRY & HARDWARE MATRIX */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
-          {/* SMART BIOMETRIC COLLAR MODULE */}
+          {/* SIMULATOR GEOFENCE SLIDER CONTROL CONFIGURATION */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
-            <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Heart size={14} color="#EF4444" /> Smart Collar Array
+            <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Heart size={14} color="#EF4444" /> Smart Collar Analytics
             </h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a' }}>
-                <div style={{ fontSize: '0.72rem', color: '#71717a' }}>Core Body Temp</div>
-                <div style={{ fontSize: '1.35rem', fontWeight: 800, marginTop: '0.25rem' }}>{collarTemp}°C</div>
+            
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+              <div style={{ backgroundColor: '#18181b', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid #27272a' }}>
+                <div style={{ fontSize: '0.68rem', color: '#71717a' }}>Collar State</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, marginTop: '0.25rem', color: getStatusColor(currentSound, stressScore) }}>{movement}</div>
               </div>
-              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a' }}>
-                <div style={{ fontSize: '0.72rem', color: '#71717a' }}>IMU Activity State</div>
-                <div style={{ fontSize: '1.05rem', fontWeight: 800, marginTop: '0.5rem', color: '#3B82F6' }}>{movement}</div>
+              <div style={{ backgroundColor: '#18181b', padding: '0.75rem 1rem', borderRadius: '12px', border: '1px solid #27272a' }}>
+                <div style={{ fontSize: '0.68rem', color: '#71717a' }}>Hub Proximity</div>
+                <div style={{ fontSize: '1.1rem', fontWeight: 800, marginTop: '0.25rem' }}>{distance}m</div>
               </div>
-              <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a', gridColumn: 'span 2' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem' }}>
-                  <span style={{ color: '#71717a' }}>Ambient Noise Amplitude</span>
-                  <span style={{ fontWeight: 600, color: '#f4f4f5' }}>{collarNoise} dB</span>
-                </div>
-                <div style={{ height: '6px', backgroundColor: '#27272a', borderRadius: '999px', marginTop: '0.5rem', overflow: 'hidden' }}>
-                  <div style={{ width: `${collarNoise !== '--' ? Math.min(Number(collarNoise), 100) : 0}%`, height: '100%', backgroundColor: '#F59E0B', borderRadius: '999px' }}></div>
-                </div>
+            </div>
+
+            {/* Adjustable Geofence Threshold Slider */}
+            <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '12px', border: '1px solid #27272a' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
+                <span style={{ color: '#a1a1aa', fontWeight: 600 }}>Set Safe Radius Limit</span>
+                <span style={{ color: '#10B981', fontWeight: 700 }}>{allowedRadius} meters</span>
               </div>
+              <input 
+                type="range" 
+                min="5" 
+                max="200" 
+                value={allowedRadius} 
+                onChange={(e) => setAllowedRadius(Number(e.target.value))} 
+                style={{ width: '100%', accentColor: '#10B981', cursor: 'pointer' }} 
+              />
             </div>
           </div>
 
-          {/* BASE STATION REGIONAL SENSORS */}
+          {/* SIMULATOR CENTRAL ENVIRONMENTAL MODULE READOUTS */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '0.75rem', fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Activity size={14} color="#10B981" /> Central Module Sensors
@@ -379,7 +397,7 @@ export default function PawGuardDashboard() {
                 <Thermometer color="#3B82F6" size={20} />
                 <div>
                   <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Room Temp</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800, color: getStatusColor(currentSound, stressScore) }}>
                     {roomTemp !== '--' ? `${roomTemp}°C` : '--'}
                   </div>
                 </div>
@@ -388,57 +406,57 @@ export default function PawGuardDashboard() {
                 <Sun color="#F59E0B" size={20} />
                 <div>
                   <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Light Lux</div>
-                  <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>
+                  <div style={{ fontSize: '1.25rem', fontWeight: 800 }}>
                     {lightLevel !== '--' ? `${lightLevel} lx` : '--'}
                   </div>
                 </div>
               </div>
               <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a', gridColumn: 'span 2', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  {isDoorOpen ? <DoorOpen color="#EF4444" size={20} /> : <DoorClosed color="#10B981" size={20} />}
+                  {isGeofenceBreached ? <DoorOpen color="#EF4444" size={20} /> : <DoorClosed color="#10B981" size={20} />}
                   <div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Access Portal Status</div>
-                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Magnetic contact perimeter loop</div>
+                    <div style={{ fontSize: '0.85rem', fontWeight: 600 }}>Boundary Assessment</div>
+                    <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Real-time spatial geofence calculation</div>
                   </div>
                 </div>
-                <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.25rem 0.6rem', borderRadius: '6px', backgroundColor: isDoorOpen ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: isDoorOpen ? '#EF4444' : '#10B981' }}>
-                  {isDoorOpen ? 'OPEN' : 'SECURE'}
+                <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.25rem 0.6rem', borderRadius: '6px', backgroundColor: isGeofenceBreached ? 'rgba(239, 68, 68, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: isGeofenceBreached ? '#EF4444' : '#10B981' }}>
+                  {isGeofenceBreached ? 'BREACHED' : 'SECURE'}
                 </span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* BLOCK 3: ANALYTICAL CLINIC REPORTS & TIMELINES */}
+        {/* BLOCK 3: ANALYTICAL RECHART PLOTS & SCROLL TIMELINES */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
-          {/* ADVANCED HEALTH CALCULATOR GRAPHIC */}
+          {/* WELLNESS CARD INDEX (Fonts scale automatically dynamically) */}
           <div style={{ background: 'linear-gradient(135deg, #18181b 0%, #09090b 100%)', borderRadius: '20px', border: '1px solid #3f3f46', padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
                 <Award size={16} color="#F59E0B" /> Wellness Index Card
               </h3>
-              <span style={{ fontSize: '0.7rem', color: '#a1a1aa', fontWeight: 500 }}>Live Assessment</span>
+              <span style={{ fontSize: '0.7rem', color: '#a1a1aa', fontWeight: 500 }}>Acoustic Stress Index</span>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', margin: '0.5rem 0' }}>
-              <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '50%', background: `conic-gradient(#10B981 ${healthScore}%, #27272a 0)`, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                <div style={{ width: '52px', height: '52px', borderRadius: '50%', backgroundColor: '#141417', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.15rem', fontWeight: 800 }}>
+              <div style={{ position: 'relative', width: '64px', height: '64px', borderRadius: '50%', background: `conic-gradient(${getStatusColor(currentSound, stressScore)} ${healthScore}%, #27272a 0)`, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                <div style={{ width: '52px', height: '52px', borderRadius: '50%', backgroundColor: '#141417', display: 'flex', justifyContent: 'center', alignItems: 'center', fontSize: '1.15rem', fontWeight: 800, color: getStatusColor(currentSound, stressScore) }}>
                   {healthScore}
                 </div>
               </div>
               <div style={{ flex: 1 }}>
-                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700 }}>
-                  {healthScore > 85 ? 'Optimal Standing' : healthScore > 65 ? 'Condition Normal' : 'Attention Urged'}
+                <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: getStatusColor(currentSound, stressScore) }}>
+                  {isGeofenceBreached ? 'Critical Geofence Breach' : stressScore === 'HIGH' ? 'Distressed Warning' : 'Optimal Standing'}
                 </h4>
                 <p style={{ margin: '0.2rem 0 0 0', fontSize: '0.72rem', color: '#a1a1aa', lineHeight: '1.3' }}>
-                  Dynamically aggregated from ambient auditory profiles and biometrics.
+                  Acoustic profile: <span style={{ color: getStatusColor(currentSound, stressScore), fontWeight: 'bold' }}>{currentSound} ({stressScore} STRESS)</span>
                 </p>
               </div>
             </div>
           </div>
 
-          {/* VACCINE & VET APPOINTMENT REGISTRY */}
+          {/* VACCINE & VET REMINDER REGISTRY */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
               <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
@@ -475,19 +493,20 @@ export default function PawGuardDashboard() {
             </div>
           </div>
 
-          {/* PREVIOUS RECORDED HISTORICAL LOG ENTRIES */}
+          {/* HISTORICAL MICRO-ACOUSTICS CHANNELS */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column' }}>
             <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <Volume2 size={15} color="#E4E4E7" /> Historical Micro-Acoustics
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', overflowY: 'auto', maxHeight: '180px', flex: 1 }}>
               {packetHistory.length > 0 ? packetHistory.map((p, i) => {
-                const sound = p.audio_analytics?.classified_sound || 'SILENCE';
+                const sound = p.audio_analytics?.detected_classification || p.audio_analytics?.classified_sound || 'SILENCE';
+                const stress = p.edge_analytics?.stress_level || 'LOW';
                 return (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.55rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', borderLeft: `3px solid ${getStatusColor(sound)}` }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 600 }}>{sound}</div>
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.55rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', borderLeft: `3px solid ${getStatusColor(sound, stress)}` }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: getStatusColor(sound, stress) }}>{sound}</div>
                     <div style={{ fontSize: '0.68rem', color: '#71717a' }}>
-                      {p.timestamp ? new Date(p.timestamp).toLocaleTimeString() : 'Syncing Time...'}
+                      {p.timestamp ? new Date(p.timestamp * 1000).toLocaleTimeString() : 'Syncing Time...'}
                     </div>
                   </div>
                 );
