@@ -314,7 +314,7 @@ export default function PawGuardDashboard() {
                 </div>
                 <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#a1a1aa' }}>{confidenceScore}% Match</span>
               </div>
-            </div>
+            </div> 
           </div>
 
           {/* MEDICAL RECORDS VAULT WITH EMBEDDED TAB ACTIONS */}
