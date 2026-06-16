@@ -1,46 +1,60 @@
 import { NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 
-// Connect to your Upstash Redis database
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL || '',
   token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
 });
 
-// 1. GET ENDPOINT: This is what your dashboard (and your browser) reads
 export async function GET() {
   try {
     const cachedData = await redis.get('telemetry');
+    const historyStrings = await redis.lrange('telemetry_history', 0, 9) || [];
     
     if (!cachedData) {
-      return NextResponse.json({ success: false, error: "Database is currently empty" });
+      return NextResponse.json({ success: false, error: "Database empty" });
     }
+
+    const historyLog = historyStrings.map((item: any) => 
+      typeof item === 'string' ? JSON.parse(item) : item
+    );
 
     return NextResponse.json({ 
       success: true, 
-      telemetry: cachedData 
+      telemetry: cachedData,
+      history: historyLog
     });
   } catch (error) {
-    return NextResponse.json({ success: false, error: "Failed to connect to Redis" }, { status: 500 });
+    return NextResponse.json({ success: false, error: "Redis connection failure" }, { status: 500 });
   }
 }
 
-// 2. POST ENDPOINT: This is where your Python simulator or ESP hardware sends data
 export async function POST(request: Request) {
   try {
-    // Security check for your secret key
     const apiKey = request.headers.get('x-api-key');
     if (apiKey !== 'PawGuard_2026_171006') {
-      return NextResponse.json({ success: false, error: 'Unauthorized hardware signature' }, { status: 401 });
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
     
-    // Save the live incoming packet directly into the 'telemetry' key in Redis
-    await redis.set('telemetry', JSON.stringify(body));
+    // Inject a clean, static server-side time string right into the packet payload
+    const platformTime = new Date().toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true
+    });
+    
+    body.processed_time = platformTime;
+    const bodyString = JSON.stringify(body);
+    
+    await redis.set('telemetry', bodyString);
+    await redis.lpush('telemetry_history', bodyString);
+    await redis.ltrim('telemetry_history', 0, 9);
 
-    return NextResponse.json({ success: true, message: 'Telemetry frame synchronized successfully' });
+    return NextResponse.json({ success: true, message: 'Telemetry synchronized' });
   } catch (error) {
-    return NextResponse.json({ success: false, error: 'Malformed telemetry packet payload' }, { status: 400 });
+    return NextResponse.json({ success: false, error: 'Malformed payload' }, { status: 400 });
   }
 }
