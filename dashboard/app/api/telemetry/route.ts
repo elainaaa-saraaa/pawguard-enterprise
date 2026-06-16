@@ -1,9 +1,14 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { kv } from '@vercel/kv';
+import { createClient } from '@vercel/kv';
 
-// Helper to apply CORS cross-origin allowances so your local python script can connect securely
+// Initialize the KV client manually using the exact storage environment configuration variables injected by your Redis Cloud setup
+const kv = createClient({
+  url: process.env.STORAGE_URL || process.env.KV_URL || '',
+  token: process.env.STORAGE_REST_API_TOKEN || process.env.KV_REST_API_TOKEN || '',
+});
+
 function applyCorsHeaders(response: NextResponse) {
   response.headers.set('Access-Control-Allow-Origin', '*');
   response.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -11,7 +16,6 @@ function applyCorsHeaders(response: NextResponse) {
   return response;
 }
 
-// Handle browser infrastructure preflight configuration checkouts
 export async function OPTIONS() {
   return applyCorsHeaders(new NextResponse(null, { status: 204 }));
 }
@@ -21,10 +25,8 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     
-    // Unshift data onto a persistent Vercel Redis list key
+    // Save telemetry packet data array frame indexes securely inside our cloud instance
     await kv.lpush('telemetry_history', data);
-    
-    // Trim the list history data stack to a max of 25 frames to keep processing lightning-fast
     await kv.ltrim('telemetry_history', 0, 24);
     
     return applyCorsHeaders(NextResponse.json({ success: true }, { status: 200 }));
@@ -37,7 +39,6 @@ export async function POST(request: Request) {
 // 2. SERVE THE LIVE HISTORY ARRAYS TO YOUR GRAPHICAL INTERFACE
 export async function GET() {
   try {
-    // Read the current telemetry queue records range out of the database
     const currentLogs = await kv.lrange('telemetry_history', 0, 24) || [];
     
     const response = NextResponse.json(currentLogs, {
