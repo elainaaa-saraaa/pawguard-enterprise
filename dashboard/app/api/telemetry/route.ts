@@ -1,97 +1,46 @@
-import { Redis } from '@upstash/redis';
 import { NextResponse } from 'next/server';
+import { Redis } from '@upstash/redis';
 
-// This explicitly tells Next.js NEVER to cache this API route
-export const dynamic = 'force-dynamic';
+// Connect to your Upstash Redis database
+const redis = new Redis({
+  url: process.env.UPSTASH_REDIS_REST_URL || '',
+  token: process.env.UPSTASH_REDIS_REST_TOKEN || '',
+});
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, X-API-KEY, x-api-key',
-};
-
-export async function OPTIONS() {
-  return new NextResponse(null, {
-    status: 200,
-    headers: corsHeaders,
-  });
-}
-
+// 1. GET ENDPOINT: This is what your dashboard (and your browser) reads
 export async function GET() {
   try {
-    const url = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-    if (!url || !token) {
-      return NextResponse.json(
-        { success: false, error: "Database environmental variables missing on Vercel." },
-        { status: 500, headers: corsHeaders }
-      );
+    const cachedData = await redis.get('telemetry');
+    
+    if (!cachedData) {
+      return NextResponse.json({ success: false, error: "Database is currently empty" });
     }
 
-    const redis = new Redis({ url, token });
-    const data = await redis.get('pawguard_data');
-
-    return NextResponse.json(
-      { success: true, telemetry: data },
-      { status: 200, headers: corsHeaders }
-    );
-
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Failed to fetch database stream" },
-      { status: 500, headers: corsHeaders }
-    );
+    return NextResponse.json({ 
+      success: true, 
+      telemetry: cachedData 
+    });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: "Failed to connect to Redis" }, { status: 500 });
   }
 }
 
-export async function POST(req: Request) {
-  const authHeader = req.headers.get('x-api-key');
-  if (authHeader !== process.env.HARDWARE_SECRET_KEY) {
-    return NextResponse.json(
-      { success: false, error: "Unauthorized API Key" },
-      { status: 401, headers: corsHeaders }
-    );
-  }
-
+// 2. POST ENDPOINT: This is where your Python simulator or ESP hardware sends data
+export async function POST(request: Request) {
   try {
-    const url = process.env.UPSTASH_REDIS_REST_URL;
-    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-    if (!url || !token) {
-      return NextResponse.json(
-        { success: false, error: "Database environmental variables missing on Vercel." },
-        { status: 500, headers: corsHeaders }
-      );
+    // Security check for your secret key
+    const apiKey = request.headers.get('x-api-key');
+    if (apiKey !== 'PawGuard_2026_171006') {
+      return NextResponse.json({ success: false, error: 'Unauthorized hardware signature' }, { status: 401 });
     }
 
-    const rawText = await req.text();
-    let body;
-    try {
-      body = JSON.parse(rawText.trim());
-    } catch (parseError: any) {
-      return NextResponse.json(
-        { success: false, error: `JSON Character Parsing Failure: ${parseError.message}` },
-        { status: 400, headers: corsHeaders }
-      );
-    }
-
-    const redis = new Redis({ url, token });
-
-    await redis.set('pawguard_data', JSON.stringify({
-      ...body,
-      timestamp: new Date().toISOString()
-    }));
+    const body = await request.json();
     
-    return NextResponse.json(
-      { success: true, message: "LIVE_DATABASE_SUCCESS" },
-      { status: 200, headers: corsHeaders }
-    );
+    // Save the live incoming packet directly into the 'telemetry' key in Redis
+    await redis.set('telemetry', JSON.stringify(body));
 
-  } catch (error: any) {
-    return NextResponse.json(
-      { success: false, error: error.message || "Internal Server Error" },
-      { status: 500, headers: corsHeaders }
-    );
+    return NextResponse.json({ success: true, message: 'Telemetry frame synchronized successfully' });
+  } catch (error) {
+    return NextResponse.json({ success: false, error: 'Malformed telemetry packet payload' }, { status: 400 });
   }
 }
