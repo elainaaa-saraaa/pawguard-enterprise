@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { 
   Activity, Shield, Thermometer, Sun, DoorOpen, DoorClosed, 
-  Volume2, Wind, Utensils, Bell, Heart, Calendar, Award, 
+  Volume2, Wind, Utensils, Calendar, Heart, Award, 
   Sparkles, CheckCircle, Clock
 } from 'lucide-react';
 
@@ -237,7 +237,7 @@ export default function PawGuardDashboard() {
               <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '14px', border: '1px solid #27272a', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 <Sun color="#F59E0B" size={20} />
                 <div>
-                  <div style={{ fontSize: '0.7_rem', color: '#71717a' }}>Light Lux</div>
+                  <div style={{ fontSize: '0.7rem', color: '#71717a' }}>Light Lux</div>
                   <div style={{ fontSize: '1.2rem', fontWeight: 800 }}>{lightLevel} lx</div>
                 </div>
               </div>
@@ -293,7 +293,7 @@ export default function PawGuardDashboard() {
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
               {reminders.map((rem) => (
-                <div key={rem.id} style={{ display: 'flex', alignItems: 'center', justifyBetween: 'space-between', padding: '0.7rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', opacity: rem.completed ? 0.5 : 1, justifyContent: 'space-between' }}>
+                <div key={rem.id} style={{ display: 'flex', alignItems: 'center', padding: '0.7rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', opacity: rem.completed ? 0.5 : 1, justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
                     <div onClick={() => toggleReminder(rem.id)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                       {rem.completed ? <CheckCircle size={16} color="#10B981" /> : <Clock size={16} color="#71717a" />}
