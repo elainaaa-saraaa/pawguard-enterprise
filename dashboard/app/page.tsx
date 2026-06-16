@@ -24,10 +24,20 @@ export default function PawGuardDashboard() {
         setTelemetry(parsedData);
 
         if (parsedData?.timestamp) {
-          const packetTime = new Date(parsedData.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+          // Parse the true incoming database timestamp
+          const dateObj = new Date(parsedData.timestamp);
+          
+          // Formats time exactly as HH:MM:SS PM/AM matching your locale
+          const packetTime = dateObj.toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            second: '2-digit',
+            hour12: true 
+          });
+
           const shortId = parsedData?.device_info?.hub_id 
             ? parsedData.device_info.hub_id.slice(-4) 
-            : '9123';
+            : '192X';
           
           const newPacket: TelemetryPacket = {
             id: shortId,
@@ -37,8 +47,10 @@ export default function PawGuardDashboard() {
           };
 
           setPacketHistory(prev => {
+            // Prevent duplicate entries if the packet timestamp hasn't changed
             if (prev.length > 0 && prev[0].time === packetTime) return prev;
-            return [newPacket, ...prev.slice(0, 4)];
+            // Keeps the latest packet on top, rolling down previous updates
+            return [newPacket, ...prev.slice(0, 5)];
           });
         }
       }
@@ -53,7 +65,7 @@ export default function PawGuardDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Data mapping from your live payload
+  // Structural mappings to real JSON keys
   const hubId = telemetry?.device_info?.hub_id || 'PG-HUB-00192X';
   const hubStatus = telemetry?.device_info?.status ? telemetry.device_info.status.toUpperCase() : 'ONLINE';
   const comfortScore = telemetry?.edge_analytics?.comfort_score_pct !== undefined ? `${telemetry.edge_analytics.comfort_score_pct}%` : '91%';
