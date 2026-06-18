@@ -257,7 +257,6 @@ export default function PawGuardDashboard() {
               PawGuard <span style={{ color: getStatusColor(currentSound, stressScore), fontWeight: 400 }}>Enterprise</span>
             </h1>
           </div>
-          <p style={{ color: '#a1a1aa', fontSize: '0.85rem', margin: '0.35rem 0 0 0' }}
           <div style={{ fontSize: '0.72rem', color: '#71717a', marginTop: '0.5rem' }}>
             Simulator Last Packet: <span style={{ color: '#10B981', fontWeight: 'bold' }}>{lastSyncTime}</span>
           </div>
@@ -417,7 +416,7 @@ export default function PawGuardDashboard() {
                   onFocus={(e) => e.currentTarget.style.borderColor = '#10B981'}
                   onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
                 />
-                <span style={{ position: 'absolute', right: '0.75rem', fontSize: '0.75rem', color: '#71717a', fontWeight: 700, pointerEvents: 'none' }}>meters</span>
+                <span style={{ position: 'absolute', right: '0.75rem', fontSize: '0.75rem', color: '#71717a', pointerEvents: 'none' }}>meters</span>
               </div>
             </div>
           </div>
