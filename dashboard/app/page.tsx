@@ -28,15 +28,18 @@ export default function PawGuardDashboard() {
   const [packetHistory, setPacketHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   
+  // Mobile Responsiveness Viewport State
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  
   // Profile Settings States
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const pfpInputRef = useRef<HTMLInputElement>(null); // Dedicated input hook for PFP
+  const pfpInputRef = useRef<HTMLInputElement>(null);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [petName, setPetName] = useState<string>('Buddy');
   const [petBreed, setPetBreed] = useState<string>('Golden Retriever');
   const [petPfp, setPetPfp] = useState<string>('https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=100');
   
-  // Geofence Parameters (Extended boundaries)
+  // Geofence Parameters (Manual input value placeholder)
   const [allowedRadius, setAllowedRadius] = useState<number>(15);
 
   // Document Management States
@@ -78,7 +81,18 @@ export default function PawGuardDashboard() {
   useEffect(() => {
     fetchTelemetry();
     const interval = setInterval(fetchTelemetry, 3000);
-    return () => clearInterval(interval);
+    
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 1024);
+    };
+    
+    handleResize(); 
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   // Proximity Notification Hook
@@ -150,7 +164,6 @@ export default function PawGuardDashboard() {
     }, 2000);
   };
 
-  // Device-based Profile Picture Upload Handler
   const handlePfpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -163,10 +176,8 @@ export default function PawGuardDashboard() {
     setDocuments(prev => prev.filter(doc => doc.id !== id));
   };
 
-  // Smart Datetime Parser Engine
   const formatTimeSafely = (timestampValue: any) => {
     if (!timestampValue) return '--:--:--';
-    
     try {
       if (!isNaN(timestampValue) && Number(timestampValue) < 10000000000) {
         return new Date(Number(timestampValue) * 1000).toLocaleTimeString();
@@ -215,13 +226,13 @@ export default function PawGuardDashboard() {
   })();
 
   return (
-    <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: '2.5rem', position: 'relative' }}>
+    <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: isMobile ? '1.25rem' : '2.5rem', position: 'relative' }}>
       
       {/* BREACH ALERT BANNER */}
       {isGeofenceBreached && (
-        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '2px solid #EF4444', padding: '1.25rem', borderRadius: '14px', color: '#FCA5A5', fontSize: '1rem', fontWeight: 800, letterSpacing: '0.02em' }}>
-          <AlertTriangle size={24} color="#EF4444" />
-          <span>🚨 ALARM: GEOFENCE BREACH! Pet is {distance}m away (Max allowed: {allowedRadius}m)</span>
+        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '2px solid #EF4444', padding: '1rem', borderRadius: '14px', color: '#FCA5A5', fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.02em' }}>
+          <AlertTriangle size={24} color="#EF4444" style={{ flexShrink: 0 }} />
+          <span>🚨 ALARM: GEOFENCE BREACH! Pet is {distance}m away (Limit: {allowedRadius}m)</span>
         </div>
       )}
 
@@ -230,15 +241,15 @@ export default function PawGuardDashboard() {
         <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {activeNotifications.map((note, index) => (
             <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid #F59E0B', padding: '1rem', borderRadius: '12px', color: '#FBBF24', fontSize: '0.85rem', fontWeight: 600 }}>
-              <Bell size={18} />
+              <Bell size={18} style={{ flexShrink: 0 }} />
               <span>{note}</span>
             </div>
           ))}
         </div>
       )}
 
-      {/* SYSTEM HEADER BAR WITH CORNER SETTINGS DEPLOYMENT */}
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1.5rem', position: 'relative' }}>
+      {/* HEADER SECTION */}
+      <header style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '2.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1.5rem', gap: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
             <Shield size={26} color={getStatusColor(currentSound, stressScore)} />
@@ -252,8 +263,8 @@ export default function PawGuardDashboard() {
           </div>
         </div>
 
-        {/* PROFILE CONTROL */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', position: 'relative' }}>
+        {/* CONTROLS PROFILE CONFIG POSITION CORNER */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981' }}></span>
             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>Live Sync</span>
@@ -261,7 +272,7 @@ export default function PawGuardDashboard() {
 
           <div 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', border: '1px solid #27272a', padding: '0.4rem 1rem', borderRadius: '14px', cursor: 'pointer', transition: 'background-color 0.2s' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', border: '1px solid #27272a', padding: '0.4rem 1rem', borderRadius: '14px', cursor: 'pointer' }}
           >
             <img src={petPfp} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: `1px solid ${getStatusColor(currentSound, stressScore)}` }} />
             <div style={{ textAlign: 'left' }}>
@@ -271,25 +282,24 @@ export default function PawGuardDashboard() {
             <Settings size={14} color="#71717a" style={{ marginLeft: '0.25rem' }} />
           </div>
 
-          {/* DYNAMIC SETTINGS OVERLAY DROP CONTAINER */}
+          {/* SETTINGS POPUP WINDOW */}
           {isProfileOpen && (
-            <div style={{ position: 'absolute', top: '120%', right: 0, backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '16px', padding: '1.25rem', width: '260px', zIndex: 100, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}>
+            <div style={{ position: 'absolute', top: '120%', right: 0, backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '16px', padding: '1.25rem', width: '240px', zIndex: 100, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#a1a1aa' }}>Profile Settings</span>
                 <X size={16} style={{ cursor: 'pointer', color: '#71717a' }} onClick={() => setIsProfileOpen(false)} />
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                {/* DEVICE BASED PHOTO UPLOADER */}
                 <div>
                   <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Avatar Photo</label>
                   <div 
                     onClick={() => pfpInputRef.current?.click()}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#18181b', border: '1px solid #27272a', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#18181b', border: '1px solid #27272a', padding: '0.4rem', borderRadius: '8px', cursor: 'pointer' }}
                   >
                     <input type="file" ref={pfpInputRef} onChange={handlePfpUpload} style={{ display: 'none' }} accept="image/*" />
-                    <Camera size={16} color="#10B981" />
-                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#e4e4e7' }}>Upload from Device</span>
+                    <Camera size={14} color="#10B981" />
+                    <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#e4e4e7' }}>Upload Image</span>
                   </div>
                 </div>
                 <div>
@@ -306,8 +316,8 @@ export default function PawGuardDashboard() {
         </div>
       </header>
 
-      {/* BODY PANEL BLOCKS */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '2rem' }}>
+      {/* DYNAMIC RESPONSIVE MAIN MAPPING GRID CONTAINER */}
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1.2fr', gap: '2rem' }}>
         
         {/* COLUMN 1 */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -327,10 +337,9 @@ export default function PawGuardDashboard() {
                 </div>
                 <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#a1a1aa' }}>{confidenceScore}% Match</span>
               </div>
-            </div> 
+            </div>
           </div>
 
-          {/* MEDICAL RECORDS VAULT WITH EMBEDDED TAB ACTIONS */}
           <div style={{ backgroundColor: '#141417', borderRadius: '20px', border: '1px solid #27272a', padding: '1.5rem' }}>
             <h3 style={{ fontSize: '0.85rem', fontWeight: 700, color: '#f4f4f5', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
               <FileText size={16} color="#3B82F6" /> Medical Document Center
@@ -389,21 +398,27 @@ export default function PawGuardDashboard() {
               </div>
             </div>
 
-            {/* EXTENDED UNRESTRICTED RANGE SLIDER */}
+            {/* MANUAL NUMERICAL INPUT BOX CONSOLE INSTEAD OF SLIDER */}
             <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '12px', border: '1px solid #27272a' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
-                <span style={{ color: '#a1a1aa', fontWeight: 600 }}>Set Safe Radius Limit</span>
-                <span style={{ color: '#10B981', fontWeight: 700 }}>{allowedRadius >= 1000 ? `${(allowedRadius / 1000).toFixed(1)} km` : `${allowedRadius} meters`}</span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <label htmlFor="radius-input" style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Set Safe Radius Limit</label>
+                <span style={{ color: '#10B981', fontSize: '0.72rem', fontWeight: 700 }}>Active Threshold</span>
               </div>
-              <input 
-                type="range" 
-                min="5" 
-                max="10000" // Max extended up to 10 kilometers
-                step={allowedRadius > 500 ? "50" : "5"} // Scales steps as it goes higher
-                value={allowedRadius} 
-                onChange={(e) => setAllowedRadius(Number(e.target.value))} 
-                style={{ width: '100%', accentColor: '#10B981' }} 
-              />
+              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <input 
+                  id="radius-input"
+                  type="number" 
+                  min="1"
+                  max="50000"
+                  value={allowedRadius || ''} 
+                  onChange={(e) => setAllowedRadius(Math.max(1, parseInt(e.target.value) || 0))} 
+                  placeholder="Enter distance..."
+                  style={{ width: '100%', backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 2.5rem 0.6rem 0.75rem', color: '#fff', fontSize: '0.85rem', outline: 'none', transition: 'border-color 0.15s' }}
+                  onFocus={(e) => e.currentTarget.style.borderColor = '#10B981'}
+                  onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+                />
+                <span style={{ position: 'absolute', right: '0.75rem', fontSize: '0.75rem', color: '#71717a', fontWeight: 700, pointerEvents: 'none' }}>meters</span>
+              </div>
             </div>
           </div>
 
@@ -537,37 +552,26 @@ export default function PawGuardDashboard() {
 
       </div>
 
-      {/* MODAL WINDOW */}
+      {/* MODAL CONFIG */}
       {isModalOpen && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '20px', padding: '2rem', width: '100%', maxWidth: '420px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Create New Schedule</h3>
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '1rem' }}>
+          <div style={{ backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '20px', padding: '1.5rem', width: '100%', maxWidth: '400px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800 }}>Create New Schedule</h3>
               <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}>
                 <X size={18} />
               </button>
             </div>
 
-            <form onSubmit={handleAddReminder} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <label style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Reminder Description</label>
-                <input 
-                  type="text" 
-                  value={newTitle} 
-                  onChange={(e) => setNewTitle(e.target.value)} 
-                  placeholder="e.g., Annual Rabies Shot"
-                  required
-                  style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem' }}
-                />
+            <form onSubmit={handleAddReminder} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ fontSize: '0.72rem', color: '#a1a1aa', fontWeight: 600 }}>Description</label>
+                <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="e.g., Annual Rabies Shot" required style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#f4f4f5', fontSize: '0.8rem' }} />
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                <label style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Category Type</label>
-                <select 
-                  value={newType} 
-                  onChange={(e) => setNewType(e.target.value)}
-                  style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem' }}
-                >
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ fontSize: '0.72rem', color: '#a1a1aa', fontWeight: 600 }}>Category</label>
+                <select value={newType} onChange={(e) => setNewType(e.target.value)} style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.5rem 0.75rem', color: '#f4f4f5', fontSize: '0.8rem' }}>
                   <option value="Vaccine">Vaccine</option>
                   <option value="Vet Visit">Vet Visit</option>
                   <option value="Medication">Medication</option>
@@ -575,33 +579,18 @@ export default function PawGuardDashboard() {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <label style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Target Date</label>
-                  <input 
-                    type="date" 
-                    value={newDate} 
-                    onChange={(e) => setNewDate(e.target.value)} 
-                    required
-                    style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', colorScheme: 'dark' }}
-                  />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.72rem', color: '#a1a1aa', fontWeight: 600 }}>Date</label>
+                  <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} required style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.5rem 0.5rem', color: '#f4f4f5', fontSize: '0.8rem', colorScheme: 'dark' }} />
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                  <label style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Target Time</label>
-                  <input 
-                    type="time" 
-                    value={newTime} 
-                    onChange={(e) => setNewTime(e.target.value)} 
-                    required
-                    style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 0.75rem', color: '#f4f4f5', fontSize: '0.85rem', colorScheme: 'dark' }}
-                  />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                  <label style={{ fontSize: '0.72rem', color: '#a1a1aa', fontWeight: 600 }}>Time</label>
+                  <input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} required style={{ backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '8px', padding: '0.5rem 0.5rem', color: '#f4f4f5', fontSize: '0.8rem', colorScheme: 'dark' }} />
                 </div>
               </div>
 
-              <button 
-                type="submit"
-                style={{ backgroundColor: '#10B981', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.75rem', fontSize: '0.85rem', fontWeight: 700 }}
-              >
+              <button type="submit" style={{ backgroundColor: '#10B981', color: '#fff', border: 'none', borderRadius: '8px', padding: '0.65rem', fontSize: '0.85rem', fontWeight: 700, marginTop: '0.5rem', cursor: 'pointer' }}>
                 Save Appointment Schedule
               </button>
             </form>
