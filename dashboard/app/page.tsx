@@ -3,7 +3,7 @@ import { useEffect, useState, useRef } from 'react';
 import { 
   Activity, Shield, Thermometer, Sun, DoorOpen, DoorClosed, 
   Volume2, Calendar, Heart, Award, CheckCircle, Clock, 
-  Plus, X, Bell, User, UploadCloud, FileText, Trash2, Settings, AlertTriangle
+  Plus, X, Bell, User, UploadCloud, FileText, Trash2, Camera, Settings, AlertTriangle
 } from 'lucide-react';
 
 interface Reminder {
@@ -30,12 +30,13 @@ export default function PawGuardDashboard() {
   
   // Profile Settings States
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const pfpInputRef = useRef<HTMLInputElement>(null); // Dedicated input hook for PFP
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [petName, setPetName] = useState<string>('Buddy');
   const [petBreed, setPetBreed] = useState<string>('Golden Retriever');
   const [petPfp, setPetPfp] = useState<string>('https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=100');
   
-  // Geofence Parameters
+  // Geofence Parameters (Extended boundaries)
   const [allowedRadius, setAllowedRadius] = useState<number>(15);
 
   // Document Management States
@@ -149,25 +150,30 @@ export default function PawGuardDashboard() {
     }, 2000);
   };
 
+  // Device-based Profile Picture Upload Handler
+  const handlePfpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const localUrl = URL.createObjectURL(file);
+    setPetPfp(localUrl);
+  };
+
   const handleDeleteDoc = (id: number, e: React.MouseEvent) => {
     e.stopPropagation(); 
     setDocuments(prev => prev.filter(doc => doc.id !== id));
   };
 
-  // SMART DATETIME PARSER ENGINE (Fixes the Invalid Date bug for both String and Epoch inputs)
+  // Smart Datetime Parser Engine
   const formatTimeSafely = (timestampValue: any) => {
     if (!timestampValue) return '--:--:--';
     
     try {
-      // If it's a pure number or numeric string (like Python's time.time() in seconds)
       if (!isNaN(timestampValue) && Number(timestampValue) < 10000000000) {
         return new Date(Number(timestampValue) * 1000).toLocaleTimeString();
       }
-      // If it's already a full millisecond number
       if (!isNaN(timestampValue)) {
         return new Date(Number(timestampValue)).toLocaleTimeString();
       }
-      // If it's an ISO String from the server (e.g., "2026-06-16T15:00:00.000Z")
       return new Date(timestampValue).toLocaleTimeString();
     } catch (error) {
       return '--:--:--';
@@ -185,7 +191,6 @@ export default function PawGuardDashboard() {
   const distance = telemetry?.collar_metrics?.distance_from_hub_meters ?? telemetry?.edge_analytics?.distance_meters ?? 0;
   const stressScore = telemetry?.edge_analytics?.stress_level || 'LOW';
   
-  // Safe display for the header clock
   const lastSyncTime = formatTimeSafely(telemetry?.timestamp);
 
   const isGeofenceBreached = distance > allowedRadius;
@@ -266,7 +271,7 @@ export default function PawGuardDashboard() {
             <Settings size={14} color="#71717a" style={{ marginLeft: '0.25rem' }} />
           </div>
 
-          {/* DROP MODIFIER CONTAINER */}
+          {/* DYNAMIC SETTINGS OVERLAY DROP CONTAINER */}
           {isProfileOpen && (
             <div style={{ position: 'absolute', top: '120%', right: 0, backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '16px', padding: '1.25rem', width: '260px', zIndex: 100, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -275,9 +280,17 @@ export default function PawGuardDashboard() {
               </div>
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                {/* DEVICE BASED PHOTO UPLOADER */}
                 <div>
-                  <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Avatar Photo URL</label>
-                  <input type="text" value={petPfp} onChange={(e) => setPetPfp(e.target.value)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
+                  <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Avatar Photo</label>
+                  <div 
+                    onClick={() => pfpInputRef.current?.click()}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#18181b', border: '1px solid #27272a', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer' }}
+                  >
+                    <input type="file" ref={pfpInputRef} onChange={handlePfpUpload} style={{ display: 'none' }} accept="image/*" />
+                    <Camera size={16} color="#10B981" />
+                    <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#e4e4e7' }}>Upload from Device</span>
+                  </div>
                 </div>
                 <div>
                   <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Pet Name</label>
@@ -376,15 +389,17 @@ export default function PawGuardDashboard() {
               </div>
             </div>
 
+            {/* EXTENDED UNRESTRICTED RANGE SLIDER */}
             <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '12px', border: '1px solid #27272a' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', marginBottom: '0.5rem' }}>
                 <span style={{ color: '#a1a1aa', fontWeight: 600 }}>Set Safe Radius Limit</span>
-                <span style={{ color: '#10B981', fontWeight: 700 }}>{allowedRadius} meters</span>
+                <span style={{ color: '#10B981', fontWeight: 700 }}>{allowedRadius >= 1000 ? `${(allowedRadius / 1000).toFixed(1)} km` : `${allowedRadius} meters`}</span>
               </div>
               <input 
                 type="range" 
                 min="5" 
-                max="200" 
+                max="10000" // Max extended up to 10 kilometers
+                step={allowedRadius > 500 ? "50" : "5"} // Scales steps as it goes higher
                 value={allowedRadius} 
                 onChange={(e) => setAllowedRadius(Number(e.target.value))} 
                 style={{ width: '100%', accentColor: '#10B981' }} 
