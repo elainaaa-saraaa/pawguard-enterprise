@@ -1,4 +1,4 @@
-'use client';
+ 'use client';
 import { useEffect, useState, useRef } from 'react';
 import { 
   Activity, Shield, Thermometer, Sun, DoorOpen, DoorClosed, 
