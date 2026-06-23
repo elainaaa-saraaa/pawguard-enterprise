@@ -89,42 +89,51 @@ export default function PawGuardDashboard() {
 
   // 2. LIVE REALTIME FIRESTORE SYNC LISTENERS
   useEffect(() => {
-    const unsubscribeReminders = onSnapshot(collection(db, 'reminders'), (snapshot) => {
-      const remindersList: Reminder[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        remindersList.push({
-          id: docSnap.id,
-          title: data.title,
-          date: data.date,
-          time: data.time,
-          type: data.type,
-          completed: data.completed
+    if (!db) return;
+    try {
+      const unsubscribeReminders = onSnapshot(collection(db, 'reminders'), (snapshot) => {
+        const remindersList: Reminder[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          remindersList.push({
+            id: docSnap.id,
+            title: data.title || '',
+            date: data.date || '',
+            time: data.time || '',
+            type: data.type || 'Vaccine',
+            completed: !!data.completed
+          });
         });
+        setReminders(remindersList.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+      }, (error) => {
+        console.error("Firestore Reminders Subscription Error:", error);
       });
-      setReminders(remindersList.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-    });
 
-    const unsubscribeDocs = onSnapshot(collection(db, 'medical_documents'), (snapshot) => {
-      const docsList: MedicalDoc[] = [];
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data();
-        docsList.push({
-          id: docSnap.id,
-          name: data.name,
-          size: data.size,
-          dateAdded: data.dateAdded,
-          fileUrl: data.fileUrl,
-          storagePath: data.storagePath
+      const unsubscribeDocs = onSnapshot(collection(db, 'medical_documents'), (snapshot) => {
+        const docsList: MedicalDoc[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          docsList.push({
+            id: docSnap.id,
+            name: data.name || '',
+            size: data.size || '',
+            dateAdded: data.dateAdded || '',
+            fileUrl: data.fileUrl || '',
+            storagePath: data.storagePath || ''
+          });
         });
+        setDocuments(docsList);
+      }, (error) => {
+        console.error("Firestore Documents Subscription Error:", error);
       });
-      setDocuments(docsList);
-    });
 
-    return () => {
-      unsubscribeReminders();
-      unsubscribeDocs();
-    };
+      return () => {
+        unsubscribeReminders();
+        unsubscribeDocs();
+      };
+    } catch (e) {
+      console.error("Real-time pipeline initialization error:", e);
+    }
   }, []);
 
   // 3. 24h REMINDER WINDOW WARNING CHECKER
@@ -152,32 +161,44 @@ export default function PawGuardDashboard() {
     return () => clearInterval(notificationInterval);
   }, [reminders]);
 
-  // FIRESTORE DATABASE MUTATIONS
+  // FIRESTORE DATABASE MUTATIONS WITH ERROR TRAPPING
   const toggleReminder = async (id: string, currentStatus: boolean) => {
-    const reminderRef = doc(db, 'reminders', id);
-    await updateDoc(reminderRef, { completed: !currentStatus });
+    try {
+      const reminderRef = doc(db, 'reminders', id);
+      await updateDoc(reminderRef, { completed: !currentStatus });
+    } catch (err: any) {
+      alert(`Could not update reminder status: ${err.message}`);
+    }
   };
 
   const handleAddReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newDate || !newTime) return;
 
-    await addDoc(collection(db, 'reminders'), {
-      title: newTitle,
-      date: newDate,
-      time: newTime,
-      type: newType,
-      completed: false
-    });
+    try {
+      // Direct write operation to Firebase Firestore
+      await addDoc(collection(db, 'reminders'), {
+        title: newTitle,
+        date: newDate,
+        time: newTime,
+        type: newType,
+        completed: false
+      });
 
-    setNewTitle(''); setNewDate(''); setNewTime('');
-    setIsModalOpen(false);
+      // Clear layout elements out on success
+      setNewTitle(''); setNewDate(''); setNewTime('');
+      setIsModalOpen(false);
+    } catch (err: any) {
+      console.error("Firebase write error:", err);
+      alert(`CRITICAL ERROR: Failed to write data into Firestore.\n\nReason: ${err.message}\n\nPlease check if your Firestore security rules are published!`);
+      setIsModalOpen(false); // Force close modal so interface unfreezes
+    }
   };
 
   // CLOUD STORAGE DEVICE FILE UPLOADS
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !storage) return;
 
     setIsUploading(true);
     const storagePath = `medical_records/${Date.now()}_${file.name}`;
@@ -186,7 +207,7 @@ export default function PawGuardDashboard() {
 
     uploadTask.on('state_changed', null, 
       (error) => {
-        console.error(error);
+        alert(`Storage Upload Error: ${error.message}`);
         setIsUploading(false);
       }, 
       async () => {
@@ -205,12 +226,12 @@ export default function PawGuardDashboard() {
 
   const handlePfpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !storage) return;
 
     const storageRef = ref(storage, `profiles/avatar_${Date.now()}`);
     const uploadTask = uploadBytesResumable(storageRef, file);
 
-    uploadTask.on('state_changed', null, (err) => console.error(err), async () => {
+    uploadTask.on('state_changed', null, (err) => alert(err.message), async () => {
       const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
       setPetPfp(downloadUrl);
     });
@@ -221,7 +242,7 @@ export default function PawGuardDashboard() {
     try {
       await deleteObject(ref(storage, storagePath));
       await deleteDoc(doc(db, 'medical_documents', id));
-    } catch (err) { console.error(err); }
+    } catch (err: any) { alert(`Delete Error: ${err.message}`); }
   };
 
   const formatTimeSafely = (timestampValue: any) => {
@@ -298,7 +319,7 @@ export default function PawGuardDashboard() {
           </div>
         </div>
 
-        {/* PROFILE PROFILE HANDLES */}
+        {/* PROFILE HANDLES */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981' }}></span>
