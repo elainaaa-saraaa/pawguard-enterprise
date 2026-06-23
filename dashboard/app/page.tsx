@@ -6,8 +6,13 @@ import {
   Plus, X, Bell, User, UploadCloud, FileText, Trash2, Camera, Settings, AlertTriangle
 } from 'lucide-react';
 
+// Connect to your newly built Firebase config file
+import { db, storage } from './utils/firebase';
+import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
+
 interface Reminder {
-  id: number;
+  id: string; 
   title: string;
   date: string;
   time: string;
@@ -16,22 +21,21 @@ interface Reminder {
 }
 
 interface MedicalDoc {
-  id: number;
+  id: string; 
   name: string;
   size: string;
   dateAdded: string;
   fileUrl: string;
+  storagePath: string; 
 }
 
 export default function PawGuardDashboard() {
   const [telemetry, setTelemetry] = useState<any>(null);
   const [packetHistory, setPacketHistory] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  
-  // Mobile Responsiveness Viewport State
   const [isMobile, setIsMobile] = useState<boolean>(false);
   
-  // Profile Settings States
+  // Profile States
   const fileInputRef = useRef<HTMLInputElement>(null);
   const pfpInputRef = useRef<HTMLInputElement>(null);
   const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
@@ -39,53 +43,41 @@ export default function PawGuardDashboard() {
   const [petBreed, setPetBreed] = useState<string>('Golden Retriever');
   const [petPfp, setPetPfp] = useState<string>('https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=100');
   
-  // Geofence Parameters (Manual input value placeholder)
+  // Custom Dynamic Geofence Parameter
   const [allowedRadius, setAllowedRadius] = useState<number>(15);
 
-  // Document Management States
-  const [isUploading, setIsUploading] = useState<boolean>(false);
-  const [documents, setDocuments] = useState<MedicalDoc[]>([
-    { id: 1, name: "Rabies_Certification_2025.pdf", size: "1.2 MB", dateAdded: "2026-01-15", fileUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" },
-    { id: 2, name: "Blood_Report_Q1.pdf", size: "840 KB", dateAdded: "2026-04-10", fileUrl: "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf" }
-  ]);
+  // Dynamic Remote Firebase Sync Arrays
+  const [documents, setDocuments] = useState<MedicalDoc[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
 
-  // Reminders & Modal States
+  // Modal and Alert States
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [activeNotifications, setActiveNotifications] = useState<string[]>([]);
   const [newTitle, setNewTitle] = useState<string>('');
   const [newDate, setNewDate] = useState<string>('');
   const [newTime, setNewTime] = useState<string>('');
   const [newType, setNewType] = useState<string>('Vaccine');
+  const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  const [reminders, setReminders] = useState<Reminder[]>([
-    { id: 1, title: "Rabies Booster Shot", date: "2026-07-12", time: "10:00", type: "Vaccine", completed: false },
-    { id: 2, title: "Routine Vet Checkup", date: "2026-08-05", time: "14:30", type: "Vet Visit", completed: false },
-    { id: 3, title: "Deworming Preventative", date: "2026-06-17", time: "09:00", type: "Medication", completed: false },
-  ]);
-
-  const fetchTelemetry = async () => {
-    try {
-      const res = await fetch('/api/telemetry');
-      const result = await res.json();
-      if (result.success && result.telemetry) {
-        const data = typeof result.telemetry === 'string' ? JSON.parse(result.telemetry) : result.telemetry;
-        setTelemetry(data);
-        if (result.history) setPacketHistory(result.history);
-        setIsLoading(false);
-      }
-    } catch (e) { 
-      console.error("Failed to establish stream synchronization:", e); 
-    }
-  };
-
+  // 1. LIVE TELEMETRY SIMULATOR LISTENER
   useEffect(() => {
+    const fetchTelemetry = async () => {
+      try {
+        const res = await fetch('/api/telemetry');
+        const result = await res.json();
+        if (result.success && result.telemetry) {
+          const data = typeof result.telemetry === 'string' ? JSON.parse(result.telemetry) : result.telemetry;
+          setTelemetry(data);
+          if (result.history) setPacketHistory(result.history);
+          setIsLoading(false);
+        }
+      } catch (e) { console.error(e); }
+    };
+
     fetchTelemetry();
     const interval = setInterval(fetchTelemetry, 3000);
     
-    const handleResize = () => {
-      setIsMobile(window.innerWidth < 1024);
-    };
-    
+    const handleResize = () => setIsMobile(window.innerWidth < 1024);
     handleResize(); 
     window.addEventListener('resize', handleResize);
     
@@ -95,7 +87,47 @@ export default function PawGuardDashboard() {
     };
   }, []);
 
-  // Proximity Notification Hook
+  // 2. LIVE REALTIME FIRESTORE SYNC LISTENERS
+  useEffect(() => {
+    const unsubscribeReminders = onSnapshot(collection(db, 'reminders'), (snapshot) => {
+      const remindersList: Reminder[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        remindersList.push({
+          id: docSnap.id,
+          title: data.title,
+          date: data.date,
+          time: data.time,
+          type: data.type,
+          completed: data.completed
+        });
+      });
+      setReminders(remindersList.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+    });
+
+    const unsubscribeDocs = onSnapshot(collection(db, 'medical_documents'), (snapshot) => {
+      const docsList: MedicalDoc[] = [];
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data();
+        docsList.push({
+          id: docSnap.id,
+          name: data.name,
+          size: data.size,
+          dateAdded: data.dateAdded,
+          fileUrl: data.fileUrl,
+          storagePath: data.storagePath
+        });
+      });
+      setDocuments(docsList);
+    });
+
+    return () => {
+      unsubscribeReminders();
+      unsubscribeDocs();
+    };
+  }, []);
+
+  // 3. 24h REMINDER WINDOW WARNING CHECKER
   useEffect(() => {
     const checkNotifications = () => {
       const now = new Date().getTime();
@@ -120,60 +152,76 @@ export default function PawGuardDashboard() {
     return () => clearInterval(notificationInterval);
   }, [reminders]);
 
-  const toggleReminder = (id: number) => {
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, completed: !r.completed } : r));
+  // FIRESTORE DATABASE MUTATIONS
+  const toggleReminder = async (id: string, currentStatus: boolean) => {
+    const reminderRef = doc(db, 'reminders', id);
+    await updateDoc(reminderRef, { completed: !currentStatus });
   };
 
-  const handleAddReminder = (e: React.FormEvent) => {
+  const handleAddReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newDate || !newTime) return;
 
-    const created: Reminder = {
-      id: Date.now(),
+    await addDoc(collection(db, 'reminders'), {
       title: newTitle,
       date: newDate,
       time: newTime,
       type: newType,
       completed: false
-    };
+    });
 
-    setReminders(prev => [created, ...prev]);
-    setNewTitle('');
-    setNewDate('');
-    setNewTime('');
+    setNewTitle(''); setNewDate(''); setNewTime('');
     setIsModalOpen(false);
   };
 
+  // CLOUD STORAGE DEVICE FILE UPLOADS
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploading(true);
+    const storagePath = `medical_records/${Date.now()}_${file.name}`;
+    const storageRef = ref(storage, storagePath);
+    const uploadTask = uploadBytesResumable(storageRef, file);
 
-    setTimeout(() => {
-      const localUrl = URL.createObjectURL(file);
-      const newDoc: MedicalDoc = {
-        id: Date.now(),
-        name: file.name,
-        size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-        dateAdded: new Date().toISOString().split('T')[0],
-        fileUrl: localUrl
-      };
-      setDocuments(prev => [newDoc, ...prev]);
-      setIsUploading(false);
-    }, 2000);
+    uploadTask.on('state_changed', null, 
+      (error) => {
+        console.error(error);
+        setIsUploading(false);
+      }, 
+      async () => {
+        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+        await addDoc(collection(db, 'medical_documents'), {
+          name: file.name,
+          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+          dateAdded: new Date().toISOString().split('T')[0],
+          fileUrl: downloadUrl,
+          storagePath: storagePath
+        });
+        setIsUploading(false);
+      }
+    );
   };
 
   const handlePfpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const localUrl = URL.createObjectURL(file);
-    setPetPfp(localUrl);
+
+    const storageRef = ref(storage, `profiles/avatar_${Date.now()}`);
+    const uploadTask = uploadBytesResumable(storageRef, file);
+
+    uploadTask.on('state_changed', null, (err) => console.error(err), async () => {
+      const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
+      setPetPfp(downloadUrl);
+    });
   };
 
-  const handleDeleteDoc = (id: number, e: React.MouseEvent) => {
+  const handleDeleteDoc = async (id: string, storagePath: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
-    setDocuments(prev => prev.filter(doc => doc.id !== id));
+    try {
+      await deleteObject(ref(storage, storagePath));
+      await deleteDoc(doc(db, 'medical_documents', id));
+    } catch (err) { console.error(err); }
   };
 
   const formatTimeSafely = (timestampValue: any) => {
@@ -182,26 +230,19 @@ export default function PawGuardDashboard() {
       if (!isNaN(timestampValue) && Number(timestampValue) < 10000000000) {
         return new Date(Number(timestampValue) * 1000).toLocaleTimeString();
       }
-      if (!isNaN(timestampValue)) {
-        return new Date(Number(timestampValue)).toLocaleTimeString();
-      }
+      if (!isNaN(timestampValue)) return new Date(Number(timestampValue)).toLocaleTimeString();
       return new Date(timestampValue).toLocaleTimeString();
-    } catch (error) {
-      return '--:--:--';
-    }
+    } catch (error) { return '--:--:--'; }
   };
 
   // Telemetry Selectors
   const currentSound = telemetry?.audio_analytics?.detected_classification || telemetry?.audio_analytics?.classified_sound || 'SILENCE';
   const confidenceScore = telemetry?.audio_analytics?.inference_confidence_pct ?? telemetry?.audio_analytics?.confidence ?? 100;
-  
   const roomTemp = (telemetry?.environment?.temperature_c ?? telemetry?.central_module?.room_temp ?? telemetry?.environment?.room_temp) ?? '--';
   const lightLevel = (telemetry?.environment?.ambient_light_lux ?? telemetry?.central_module?.light_lux ?? telemetry?.environment?.light_lux) ?? '--';
-
   const movement = (telemetry?.collar_metrics?.activity_state ?? telemetry?.collar?.movement_activity) || 'STATIONARY';
   const distance = telemetry?.collar_metrics?.distance_from_hub_meters ?? telemetry?.edge_analytics?.distance_meters ?? 0;
   const stressScore = telemetry?.edge_analytics?.stress_level || 'LOW';
-  
   const lastSyncTime = formatTimeSafely(telemetry?.timestamp);
 
   const isGeofenceBreached = distance > allowedRadius;
@@ -209,13 +250,8 @@ export default function PawGuardDashboard() {
   const getStatusColor = (sound: string, stress: string) => {
     const cleanSound = sound.toUpperCase();
     const cleanStress = stress.toUpperCase();
-
-    if (cleanSound === 'BARK' || cleanSound === 'GROWL' || cleanStress === 'HIGH' || isGeofenceBreached) {
-      return '#EF4444'; 
-    }
-    if (cleanSound === 'WHINE' || cleanSound === 'HUMAN SPEECH' || movement.toUpperCase() === 'RESTLESS') {
-      return '#F59E0B'; 
-    }
+    if (cleanSound === 'BARK' || cleanSound === 'GROWL' || cleanStress === 'HIGH' || isGeofenceBreached) return '#EF4444'; 
+    if (cleanSound === 'WHINE' || cleanSound === 'HUMAN SPEECH' || movement.toUpperCase() === 'RESTLESS') return '#F59E0B'; 
     return '#10B981'; 
   };
 
@@ -228,15 +264,15 @@ export default function PawGuardDashboard() {
   return (
     <div style={{ backgroundColor: '#09090b', color: '#f4f4f5', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif', padding: isMobile ? '1.25rem' : '2.5rem', position: 'relative' }}>
       
-      {/* BREACH ALERT BANNER */}
+      {/* BREACH BANNER */}
       {isGeofenceBreached && (
-        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '2px solid #EF4444', padding: '1rem', borderRadius: '14px', color: '#FCA5A5', fontSize: '0.9rem', fontWeight: 800, letterSpacing: '0.02em' }}>
+        <div style={{ marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: 'rgba(239, 68, 68, 0.15)', border: '2px solid #EF4444', padding: '1rem', borderRadius: '14px', color: '#FCA5A5', fontSize: '0.9rem', fontWeight: 800 }}>
           <AlertTriangle size={24} color="#EF4444" style={{ flexShrink: 0 }} />
           <span>🚨 ALARM: GEOFENCE BREACH! Pet is {distance}m away (Limit: {allowedRadius}m)</span>
         </div>
       )}
 
-      {/* NOTIFICATION PROXIMITY BANNER */}
+      {/* NOTIFICATION DEADLINE BANNER */}
       {activeNotifications.length > 0 && (
         <div style={{ marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {activeNotifications.map((note, index) => (
@@ -248,7 +284,7 @@ export default function PawGuardDashboard() {
         </div>
       )}
 
-      {/* HEADER SECTION */}
+      {/* HEADER */}
       <header style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'space-between', alignItems: isMobile ? 'flex-start' : 'center', marginBottom: '2.5rem', borderBottom: '1px solid #27272a', paddingBottom: '1.5rem', gap: '1.5rem' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -262,7 +298,7 @@ export default function PawGuardDashboard() {
           </div>
         </div>
 
-        {/* CONTROLS PROFILE CONFIG POSITION CORNER */}
+        {/* PROFILE PROFILE HANDLES */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981' }}></span>
@@ -281,7 +317,7 @@ export default function PawGuardDashboard() {
             <Settings size={14} color="#71717a" style={{ marginLeft: '0.25rem' }} />
           </div>
 
-          {/* SETTINGS POPUP WINDOW */}
+          {/* DROP DOWN BOX */}
           {isProfileOpen && (
             <div style={{ position: 'absolute', top: '120%', right: 0, backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '16px', padding: '1.25rem', width: '240px', zIndex: 100, boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
@@ -315,7 +351,7 @@ export default function PawGuardDashboard() {
         </div>
       </header>
 
-      {/* DYNAMIC RESPONSIVE MAIN MAPPING GRID CONTAINER */}
+      {/* THREE COLUMN SYSTEM CORES */}
       <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr 1.2fr', gap: '2rem' }}>
         
         {/* COLUMN 1 */}
@@ -324,15 +360,14 @@ export default function PawGuardDashboard() {
             <span style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', color: '#a1a1aa', letterSpacing: '0.08em', display: 'block', marginBottom: '1.5rem' }}>
               INMP441 I2S Microphone
             </span>
-            
             <div style={{ margin: '0.5rem 0' }}>
               <span style={{ fontSize: '0.8rem', color: '#71717a' }}>Acoustic Classification</span>
-              <h2 style={{ fontSize: '3.2rem', fontWeight: 900, margin: '0.15rem 0', color: getStatusColor(currentSound, stressScore), transition: 'color 0.2s ease', letterSpacing: '-0.02em' }}>
+              <h2 style={{ fontSize: '3.2rem', fontWeight: 900, margin: '0.15rem 0', color: getStatusColor(currentSound, stressScore), letterSpacing: '-0.02em' }}>
                 {currentSound}
               </h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: '0.75rem' }}>
                 <div style={{ flex: 1, height: '5px', backgroundColor: '#27272a', borderRadius: '999px' }}>
-                  <div style={{ width: `${confidenceScore}%`, height: '100%', backgroundColor: getStatusColor(currentSound, stressScore), borderRadius: '999px', transition: 'width 0.4s ease' }}></div>
+                  <div style={{ width: `${confidenceScore}%`, height: '100%', backgroundColor: getStatusColor(currentSound, stressScore), borderRadius: '999px' }}></div>
                 </div>
                 <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#a1a1aa' }}>{confidenceScore}% Match</span>
               </div>
@@ -346,12 +381,12 @@ export default function PawGuardDashboard() {
 
             <div 
               onClick={() => fileInputRef.current?.click()}
-              style={{ border: '2px dashed #27272a', borderRadius: '12px', padding: '1rem', textAlign: 'center', cursor: 'pointer', backgroundColor: '#18181b', transition: 'border-color 0.2s', marginBottom: '1rem' }}
+              style={{ border: '2px dashed #27272a', borderRadius: '12px', padding: '1rem', textAlign: 'center', cursor: 'pointer', backgroundColor: '#18181b', marginBottom: '1rem' }}
             >
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf,.png,.jpg,.jpeg,.doc" />
               <UploadCloud size={22} color="#71717a" style={{ margin: '0 auto 0.5rem auto', display: 'block' }} />
               <span style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block' }}>
-                {isUploading ? "Uploading file..." : "Upload medical record"}
+                {isUploading ? "Uploading to Cloud Bucket..." : "Upload medical record"}
               </span>
               <span style={{ fontSize: '0.65rem', color: '#71717a', display: 'block', marginTop: '0.15rem' }}>PDF, Doc or Images</span>
             </div>
@@ -370,7 +405,7 @@ export default function PawGuardDashboard() {
                       <div style={{ fontSize: '0.65rem', color: '#71717a' }}>{doc.size} • Added {doc.dateAdded}</div>
                     </div>
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id, e); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id, doc.storagePath, e); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -397,24 +432,17 @@ export default function PawGuardDashboard() {
               </div>
             </div>
 
-            {/* MANUAL NUMERICAL INPUT BOX CONSOLE INSTEAD OF SLIDER */}
+            {/* BOX TEXT CONTAINER */}
             <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '12px', border: '1px solid #27272a' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <label htmlFor="radius-input" style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Set Safe Radius Limit</label>
-                <span style={{ color: '#10B981', fontSize: '0.72rem', fontWeight: 700 }}>Active Threshold</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
                 <input 
-                  id="radius-input"
-                  type="number" 
-                  min="1"
-                  max="50000"
+                  id="radius-input" type="number" min="1" max="50000"
                   value={allowedRadius || ''} 
                   onChange={(e) => setAllowedRadius(Math.max(1, parseInt(e.target.value) || 0))} 
-                  placeholder="Enter distance..."
-                  style={{ width: '100%', backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 2.5rem 0.6rem 0.75rem', color: '#fff', fontSize: '0.85rem', outline: 'none', transition: 'border-color 0.15s' }}
-                  onFocus={(e) => e.currentTarget.style.borderColor = '#10B981'}
-                  onBlur={(e) => e.currentTarget.style.borderColor = '#27272a'}
+                  style={{ width: '100%', backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '8px', padding: '0.6rem 2.5rem 0.6rem 0.75rem', color: '#fff', fontSize: '0.85rem', outline: 'none' }}
                 />
                 <span style={{ position: 'absolute', right: '0.75rem', fontSize: '0.75rem', color: '#71717a', pointerEvents: 'none' }}>meters</span>
               </div>
@@ -504,7 +532,7 @@ export default function PawGuardDashboard() {
               {reminders.map((rem) => (
                 <div key={rem.id} style={{ display: 'flex', alignItems: 'center', padding: '0.7rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', opacity: rem.completed ? 0.5 : 1, justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <div onClick={() => toggleReminder(rem.id)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                    <div onClick={() => toggleReminder(rem.id, rem.completed)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                       {rem.completed ? <CheckCircle size={16} color="#10B981" /> : <Clock size={16} color="#71717a" />}
                     </div>
                     <div>
@@ -513,10 +541,10 @@ export default function PawGuardDashboard() {
                     </div>
                   </div>
                   <button 
-                    onClick={() => toggleReminder(rem.id)}
-                    style={{ background: 'none', border: '1px solid #27272a', color: rem.completed ? '#10B981' : '#a1a1aa', fontSize: '0.68rem', padding: '0.2rem 0.5rem', borderRadius: '6px', cursor: 'pointer', fontWeight: 600 }}
+                    onClick={() => deleteDoc(doc(db, 'reminders', rem.id))}
+                    style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}
                   >
-                    {rem.completed ? 'Done' : 'Mark'}
+                    <X size={14} />
                   </button>
                 </div>
               ))}
@@ -551,7 +579,7 @@ export default function PawGuardDashboard() {
 
       </div>
 
-      {/* MODAL CONFIG */}
+      {/* MODAL WINDOW */}
       {isModalOpen && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '1rem' }}>
           <div style={{ backgroundColor: '#141417', border: '1px solid #27272a', borderRadius: '20px', padding: '1.5rem', width: '100%', maxWidth: '400px' }}>
