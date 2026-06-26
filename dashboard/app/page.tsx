@@ -6,11 +6,6 @@ import {
   Plus, X, Bell, User, UploadCloud, FileText, Trash2, Camera, Settings, AlertTriangle
 } from 'lucide-react';
 
-// Connect to your newly built Firebase config file
-import { db, storage } from './utils/firebase';
-import { collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'firebase/storage';
-
 interface Reminder {
   id: string; 
   title: string;
@@ -26,7 +21,6 @@ interface MedicalDoc {
   size: string;
   dateAdded: string;
   fileUrl: string;
-  storagePath: string; 
 }
 
 export default function PawGuardDashboard() {
@@ -46,7 +40,7 @@ export default function PawGuardDashboard() {
   // Custom Dynamic Geofence Parameter
   const [allowedRadius, setAllowedRadius] = useState<number>(15);
 
-  // Dynamic Remote Firebase Sync Arrays
+  // Dynamic Persistent Arrays
   const [documents, setDocuments] = useState<MedicalDoc[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
 
@@ -57,7 +51,34 @@ export default function PawGuardDashboard() {
   const [newDate, setNewDate] = useState<string>('');
   const [newTime, setNewTime] = useState<string>('');
   const [newType, setNewType] = useState<string>('Vaccine');
-  const [isUploading, setIsUploading] = useState<boolean>(false);
+
+  // LOAD PERSISTED DATA FROM LOCAL STORAGE ON MOUNT
+  useEffect(() => {
+    const savedReminders = localStorage.getItem('pawguard_reminders');
+    const savedDocs = localStorage.getItem('pawguard_docs');
+    const savedProfile = localStorage.getItem('pawguard_profile');
+
+    if (savedReminders) setReminders(JSON.parse(savedReminders));
+    if (savedDocs) setDocuments(JSON.parse(savedDocs));
+    if (savedProfile) {
+      const profile = JSON.parse(savedProfile);
+      setPetName(profile.name || 'Buddy');
+      setPetBreed(profile.breed || 'Golden Retriever');
+      setPetPfp(profile.pfp || 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=100');
+    }
+  }, []);
+
+  // SAVE REMINDERS MUTATION SINK
+  const saveRemindersToStorage = (updatedList: Reminder[]) => {
+    setReminders(updatedList);
+    localStorage.setItem('pawguard_reminders', JSON.stringify(updatedList));
+  };
+
+  // SAVE DOCUMENTS MUTATION SINK
+  const saveDocsToStorage = (updatedDocs: MedicalDoc[]) => {
+    setDocuments(updatedDocs);
+    localStorage.setItem('pawguard_docs', JSON.stringify(updatedDocs));
+  };
 
   // 1. LIVE TELEMETRY SIMULATOR LISTENER
   useEffect(() => {
@@ -87,56 +108,7 @@ export default function PawGuardDashboard() {
     };
   }, []);
 
-  // 2. LIVE REALTIME FIRESTORE SYNC LISTENERS
-  useEffect(() => {
-    if (!db) return;
-    try {
-      const unsubscribeReminders = onSnapshot(collection(db, 'reminders'), (snapshot) => {
-        const remindersList: Reminder[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          remindersList.push({
-            id: docSnap.id,
-            title: data.title || '',
-            date: data.date || '',
-            time: data.time || '',
-            type: data.type || 'Vaccine',
-            completed: !!data.completed
-          });
-        });
-        setReminders(remindersList.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
-      }, (error) => {
-        console.error("Firestore Reminders Subscription Error:", error);
-      });
-
-      const unsubscribeDocs = onSnapshot(collection(db, 'medical_documents'), (snapshot) => {
-        const docsList: MedicalDoc[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          docsList.push({
-            id: docSnap.id,
-            name: data.name || '',
-            size: data.size || '',
-            dateAdded: data.dateAdded || '',
-            fileUrl: data.fileUrl || '',
-            storagePath: data.storagePath || ''
-          });
-        });
-        setDocuments(docsList);
-      }, (error) => {
-        console.error("Firestore Documents Subscription Error:", error);
-      });
-
-      return () => {
-        unsubscribeReminders();
-        unsubscribeDocs();
-      };
-    } catch (e) {
-      console.error("Real-time pipeline initialization error:", e);
-    }
-  }, []);
-
-  // 3. 24h REMINDER WINDOW WARNING CHECKER
+  // 2. 24h REMINDER WINDOW WARNING CHECKER
   useEffect(() => {
     const checkNotifications = () => {
       const now = new Date().getTime();
@@ -161,88 +133,64 @@ export default function PawGuardDashboard() {
     return () => clearInterval(notificationInterval);
   }, [reminders]);
 
-  // FIRESTORE DATABASE MUTATIONS WITH ERROR TRAPPING
-  const toggleReminder = async (id: string, currentStatus: boolean) => {
-    try {
-      const reminderRef = doc(db, 'reminders', id);
-      await updateDoc(reminderRef, { completed: !currentStatus });
-    } catch (err: any) {
-      alert(`Could not update reminder status: ${err.message}`);
-    }
+  // ACTION HANDLERS (ALL LOCAL PERSISTENCE)
+  const toggleReminder = (id: string) => {
+    const updated = reminders.map(rem => 
+      rem.id === id ? { ...rem, completed: !rem.completed } : rem
+    );
+    saveRemindersToStorage(updated);
   };
 
-  const handleAddReminder = async (e: React.FormEvent) => {
+  const deleteReminder = (id: string) => {
+    const updated = reminders.filter(rem => rem.id !== id);
+    saveRemindersToStorage(updated);
+  };
+
+  const handleAddReminder = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newDate || !newTime) return;
 
-    try {
-      // Direct write operation to Firebase Firestore
-      await addDoc(collection(db, 'reminders'), {
-        title: newTitle,
-        date: newDate,
-        time: newTime,
-        type: newType,
-        completed: false
-      });
+    const newReminder: Reminder = {
+      id: crypto.randomUUID(),
+      title: newTitle,
+      date: newDate,
+      time: newTime,
+      type: newType,
+      completed: false
+    };
 
-      // Clear layout elements out on success
-      setNewTitle(''); setNewDate(''); setNewTime('');
-      setIsModalOpen(false);
-    } catch (err: any) {
-      console.error("Firebase write error:", err);
-      alert(`CRITICAL ERROR: Failed to write data into Firestore.\n\nReason: ${err.message}\n\nPlease check if your Firestore security rules are published!`);
-      setIsModalOpen(false); // Force close modal so interface unfreezes
-    }
+    const updated = [...reminders, newReminder].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    saveRemindersToStorage(updated);
+
+    // Clean form elements and close modal cleanly
+    setNewTitle(''); setNewDate(''); setNewTime('');
+    setIsModalOpen(false);
   };
 
-  // CLOUD STORAGE DEVICE FILE UPLOADS
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !storage) return;
+    if (!file) return;
 
-    setIsUploading(true);
-    const storagePath = `medical_records/${Date.now()}_${file.name}`;
-    const storageRef = ref(storage, storagePath);
-    const uploadTask = uploadBytesResumable(storageRef, file);
+    const newDoc: MedicalDoc = {
+      id: crypto.randomUUID(),
+      name: file.name,
+      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+      dateAdded: new Date().toISOString().split('T')[0],
+      fileUrl: '#' // Point to placeholder layout reference link
+    };
 
-    uploadTask.on('state_changed', null, 
-      (error) => {
-        alert(`Storage Upload Error: ${error.message}`);
-        setIsUploading(false);
-      }, 
-      async () => {
-        const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-        await addDoc(collection(db, 'medical_documents'), {
-          name: file.name,
-          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-          dateAdded: new Date().toISOString().split('T')[0],
-          fileUrl: downloadUrl,
-          storagePath: storagePath
-        });
-        setIsUploading(false);
-      }
-    );
+    saveDocsToStorage([...documents, newDoc]);
   };
 
-  const handlePfpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !storage) return;
-
-    const storageRef = ref(storage, `profiles/avatar_${Date.now()}`);
-    const uploadTask = uploadBytesResumable(storageRef, file);
-
-    uploadTask.on('state_changed', null, (err) => alert(err.message), async () => {
-      const downloadUrl = await getDownloadURL(uploadTask.snapshot.ref);
-      setPetPfp(downloadUrl);
-    });
-  };
-
-  const handleDeleteDoc = async (id: string, storagePath: string, e: React.MouseEvent) => {
+  const handleDeleteDoc = (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
-    try {
-      await deleteObject(ref(storage, storagePath));
-      await deleteDoc(doc(db, 'medical_documents', id));
-    } catch (err: any) { alert(`Delete Error: ${err.message}`); }
+    saveDocsToStorage(documents.filter(doc => doc.id !== id));
+  };
+
+  const handleProfileSave = (name: string, breed: string) => {
+    setPetName(name);
+    setPetBreed(breed);
+    localStorage.setItem('pawguard_profile', JSON.stringify({ name, breed, pfp: petPfp }));
   };
 
   const formatTimeSafely = (timestampValue: any) => {
@@ -323,7 +271,7 @@ export default function PawGuardDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981' }}></span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>Live Sync</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>Local Engine</span>
           </div>
 
           <div 
@@ -348,23 +296,12 @@ export default function PawGuardDashboard() {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 <div>
-                  <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Avatar Photo</label>
-                  <div 
-                    onClick={() => pfpInputRef.current?.click()}
-                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#18181b', border: '1px solid #27272a', padding: '0.4rem', borderRadius: '8px', cursor: 'pointer' }}
-                  >
-                    <input type="file" ref={pfpInputRef} onChange={handlePfpUpload} style={{ display: 'none' }} accept="image/*" />
-                    <Camera size={14} color="#10B981" />
-                    <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#e4e4e7' }}>Upload Image</span>
-                  </div>
-                </div>
-                <div>
                   <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Pet Name</label>
-                  <input type="text" value={petName} onChange={(e) => setPetName(e.target.value)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
+                  <input type="text" value={petName} onChange={(e) => handleProfileSave(e.target.value, petBreed)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
                 </div>
                 <div>
                   <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Breed Species</label>
-                  <input type="text" value={petBreed} onChange={(e) => setPetBreed(e.target.value)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
+                  <input type="text" value={petBreed} onChange={(e) => handleProfileSave(petName, e.target.value)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
                 </div>
               </div>
             </div>
@@ -406,9 +343,7 @@ export default function PawGuardDashboard() {
             >
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf,.png,.jpg,.jpeg,.doc" />
               <UploadCloud size={22} color="#71717a" style={{ margin: '0 auto 0.5rem auto', display: 'block' }} />
-              <span style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block' }}>
-                {isUploading ? "Uploading to Cloud Bucket..." : "Upload medical record"}
-              </span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block' }}>Upload medical record</span>
               <span style={{ fontSize: '0.65rem', color: '#71717a', display: 'block', marginTop: '0.15rem' }}>PDF, Doc or Images</span>
             </div>
 
@@ -416,8 +351,7 @@ export default function PawGuardDashboard() {
               {documents.map((doc) => (
                 <div 
                   key={doc.id} 
-                  onClick={() => window.open(doc.fileUrl, '_blank')}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', border: '1px solid #27272a', cursor: 'pointer' }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', border: '1px solid #27272a' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
                     <FileText size={16} color="#3B82F6" />
@@ -426,7 +360,7 @@ export default function PawGuardDashboard() {
                       <div style={{ fontSize: '0.65rem', color: '#71717a' }}>{doc.size} • Added {doc.dateAdded}</div>
                     </div>
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id, doc.storagePath, e); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                  <button onClick={(e) => handleDeleteDoc(doc.id, e)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -553,7 +487,7 @@ export default function PawGuardDashboard() {
               {reminders.map((rem) => (
                 <div key={rem.id} style={{ display: 'flex', alignItems: 'center', padding: '0.7rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', opacity: rem.completed ? 0.5 : 1, justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <div onClick={() => toggleReminder(rem.id, rem.completed)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                    <div onClick={() => toggleReminder(rem.id)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                       {rem.completed ? <CheckCircle size={16} color="#10B981" /> : <Clock size={16} color="#71717a" />}
                     </div>
                     <div>
@@ -562,7 +496,7 @@ export default function PawGuardDashboard() {
                     </div>
                   </div>
                   <button 
-                    onClick={() => deleteDoc(doc(db, 'reminders', rem.id))}
+                    onClick={() => deleteReminder(rem.id)}
                     style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}
                   >
                     <X size={14} />
