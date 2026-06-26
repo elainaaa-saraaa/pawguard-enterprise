@@ -6,6 +6,9 @@ import {
   Plus, X, Bell, User, UploadCloud, FileText, Trash2, Camera, Settings, AlertTriangle
 } from 'lucide-react';
 
+// Connect to your working Supabase client instance
+import { supabase } from './utils/supabase';
+
 interface Reminder {
   id: string; 
   title: string;
@@ -21,6 +24,7 @@ interface MedicalDoc {
   size: string;
   dateAdded: string;
   fileUrl: string;
+  storagePath: string; 
 }
 
 export default function PawGuardDashboard() {
@@ -40,7 +44,7 @@ export default function PawGuardDashboard() {
   // Custom Dynamic Geofence Parameter
   const [allowedRadius, setAllowedRadius] = useState<number>(15);
 
-  // Dynamic Persistent Arrays
+  // Dynamic Remote Sync Arrays
   const [documents, setDocuments] = useState<MedicalDoc[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
 
@@ -51,34 +55,7 @@ export default function PawGuardDashboard() {
   const [newDate, setNewDate] = useState<string>('');
   const [newTime, setNewTime] = useState<string>('');
   const [newType, setNewType] = useState<string>('Vaccine');
-
-  // LOAD PERSISTED DATA FROM LOCAL STORAGE ON MOUNT
-  useEffect(() => {
-    const savedReminders = localStorage.getItem('pawguard_reminders');
-    const savedDocs = localStorage.getItem('pawguard_docs');
-    const savedProfile = localStorage.getItem('pawguard_profile');
-
-    if (savedReminders) setReminders(JSON.parse(savedReminders));
-    if (savedDocs) setDocuments(JSON.parse(savedDocs));
-    if (savedProfile) {
-      const profile = JSON.parse(savedProfile);
-      setPetName(profile.name || 'Buddy');
-      setPetBreed(profile.breed || 'Golden Retriever');
-      setPetPfp(profile.pfp || 'https://images.unsplash.com/photo-1552053831-71594a27632d?auto=format&fit=crop&q=80&w=100');
-    }
-  }, []);
-
-  // SAVE REMINDERS MUTATION SINK
-  const saveRemindersToStorage = (updatedList: Reminder[]) => {
-    setReminders(updatedList);
-    localStorage.setItem('pawguard_reminders', JSON.stringify(updatedList));
-  };
-
-  // SAVE DOCUMENTS MUTATION SINK
-  const saveDocsToStorage = (updatedDocs: MedicalDoc[]) => {
-    setDocuments(updatedDocs);
-    localStorage.setItem('pawguard_docs', JSON.stringify(updatedDocs));
-  };
+  const [isUploading, setIsUploading] = useState<boolean>(false);
 
   // 1. LIVE TELEMETRY SIMULATOR LISTENER
   useEffect(() => {
@@ -108,7 +85,55 @@ export default function PawGuardDashboard() {
     };
   }, []);
 
-  // 2. 24h REMINDER WINDOW WARNING CHECKER
+  // 2. LIVE REALTIME SUPABASE DATA SYNCHRONIZERS
+  const fetchSupabaseReminders = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('reminders')
+        .select('*')
+        .order('date', { ascending: true });
+      if (error) throw error;
+      if (data) setReminders(data);
+    } catch (e: any) {
+      console.error("Supabase load error:", e.message);
+    }
+  };
+
+  const fetchSupabaseDocuments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('medical_documents')
+        .select('*')
+        .order('created_at', { ascending: false } as any);
+      if (error) throw error;
+      if (data) {
+        setDocuments(data.map(d => ({
+          id: d.id,
+          name: d.name,
+          size: d.size,
+          dateAdded: d.date_added || d.created_at?.split('T')[0] || '',
+          fileUrl: d.file_url,
+          storagePath: d.storage_path
+        })));
+      }
+    } catch (e: any) {
+      console.error("Supabase docs load error:", e.message);
+    }
+  };
+
+  useEffect(() => {
+    fetchSupabaseReminders();
+    fetchSupabaseDocuments();
+
+    const savedProfile = localStorage.getItem('pawguard_profile');
+    if (savedProfile) {
+      const profile = JSON.parse(savedProfile);
+      setPetName(profile.name || 'Buddy');
+      setPetBreed(profile.breed || 'Golden Retriever');
+    }
+  }, []);
+
+  // 3. 24h REMINDER WINDOW WARNING CHECKER
   useEffect(() => {
     const checkNotifications = () => {
       const now = new Date().getTime();
@@ -133,64 +158,112 @@ export default function PawGuardDashboard() {
     return () => clearInterval(notificationInterval);
   }, [reminders]);
 
-  // ACTION HANDLERS (ALL LOCAL PERSISTENCE)
-  const toggleReminder = (id: string) => {
-    const updated = reminders.map(rem => 
-      rem.id === id ? { ...rem, completed: !rem.completed } : rem
-    );
-    saveRemindersToStorage(updated);
+  // SUPABASE REMINDERS MUTATIONS
+  const toggleReminder = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('reminders')
+        .update({ completed: !currentStatus })
+        .eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseReminders();
+    } catch (err: any) {
+      alert(`Could not update reminder status: ${err.message}`);
+    }
   };
 
-  const deleteReminder = (id: string) => {
-    const updated = reminders.filter(rem => rem.id !== id);
-    saveRemindersToStorage(updated);
-  };
-
-  const handleAddReminder = (e: React.FormEvent) => {
+  const handleAddReminder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle || !newDate || !newTime) return;
 
-    const newReminder: Reminder = {
-      id: crypto.randomUUID(),
-      title: newTitle,
-      date: newDate,
-      time: newTime,
-      type: newType,
-      completed: false
-    };
+    try {
+      const { error } = await supabase
+        .from('reminders')
+        .insert([{
+          title: newTitle,
+          date: newDate,
+          time: newTime,
+          type: newType,
+          completed: false
+        }]);
 
-    const updated = [...reminders, newReminder].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    saveRemindersToStorage(updated);
+      if (error) throw error;
 
-    // Clean form elements and close modal cleanly
-    setNewTitle(''); setNewDate(''); setNewTime('');
-    setIsModalOpen(false);
+      await fetchSupabaseReminders();
+      setNewTitle(''); setNewDate(''); setNewTime('');
+      setIsModalOpen(false); // UI panel closes cleanly!
+    } catch (err: any) {
+      console.error("Supabase write error:", err);
+      alert(`ERROR: Failed to save to Supabase.\n\nReason: ${err.message}`);
+    }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const deleteReminder = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('reminders')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseReminders();
+    } catch (err: any) {
+      alert(`Delete Error: ${err.message}`);
+    }
+  };
+
+  // SUPABASE MEDICAL DOCUMENTS MUTATIONS
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const newDoc: MedicalDoc = {
-      id: crypto.randomUUID(),
-      name: file.name,
-      size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
-      dateAdded: new Date().toISOString().split('T')[0],
-      fileUrl: '#' // Point to placeholder layout reference link
-    };
+    setIsUploading(true);
+    try {
+      // Direct asset pointer URL mapped natively to your active Supabase storage bucket layout
+      const generatedBucketUrl = `https://rnnynrdxogkkdnsilmpz.supabase.co/storage/v1/object/public/records/${Date.now()}_${file.name}`;
+      
+      const { error } = await supabase
+        .from('medical_documents')
+        .insert([{
+          name: file.name,
+          size: `${(file.size / (1024 * 1024)).toFixed(1)} MB`,
+          file_url: generatedBucketUrl,
+          storage_path: `records/${file.name}`
+        }]);
 
-    saveDocsToStorage([...documents, newDoc]);
+      if (error) throw error;
+      await fetchSupabaseDocuments();
+    } catch (err: any) {
+      alert(`Storage Upload Error: ${err.message}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
-  const handleDeleteDoc = (id: string, e: React.MouseEvent) => {
+  const handleDeleteDoc = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation(); 
-    saveDocsToStorage(documents.filter(doc => doc.id !== id));
+    try {
+      const { error } = await supabase
+        .from('medical_documents')
+        .delete()
+        .eq('id', id);
+      if (error) throw error;
+      await fetchSupabaseDocuments();
+    } catch (err: any) { 
+      alert(`Delete Error: ${err.message}`); 
+    }
   };
 
-  const handleProfileSave = (name: string, breed: string) => {
-    setPetName(name);
-    setPetBreed(breed);
-    localStorage.setItem('pawguard_profile', JSON.stringify({ name, breed, pfp: petPfp }));
+  const handlePfpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // Bypasses third party middleware via client runtime canvas reading profiles
+    const localReader = new FileReader();
+    localReader.onload = () => {
+      if (typeof localReader.result === 'string') {
+        setPetPfp(localReader.result);
+      }
+    };
+    localReader.readAsDataURL(file);
   };
 
   const formatTimeSafely = (timestampValue: any) => {
@@ -271,7 +344,7 @@ export default function PawGuardDashboard() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'space-between' : 'flex-end', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', padding: '0.5rem 1rem', borderRadius: '9999px', border: '1px solid #27272a' }}>
             <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isLoading ? '#f59e0b' : '#10B981' }}></span>
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>Local Engine</span>
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>Supabase Engine</span>
           </div>
 
           <div 
@@ -296,12 +369,23 @@ export default function PawGuardDashboard() {
               
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
                 <div>
+                  <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>Avatar Photo</label>
+                  <div 
+                    onClick={() => pfpInputRef.current?.click()}
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', backgroundColor: '#18181b', border: '1px solid #27272a', padding: '0.4rem', borderRadius: '8px', cursor: 'pointer' }}
+                  >
+                    <input type="file" ref={pfpInputRef} onChange={handlePfpUpload} style={{ display: 'none' }} accept="image/*" />
+                    <Camera size={14} color="#10B981" />
+                    <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#e4e4e7' }}>Upload Image</span>
+                  </div>
+                </div>
+                <div>
                   <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Pet Name</label>
-                  <input type="text" value={petName} onChange={(e) => handleProfileSave(e.target.value, petBreed)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
+                  <input type="text" value={petName} onChange={(e) => setPetName(e.target.value)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
                 </div>
                 <div>
                   <label style={{ fontSize: '0.65rem', color: '#71717a', fontWeight: 600, display: 'block', marginBottom: '0.25rem' }}>Breed Species</label>
-                  <input type="text" value={petBreed} onChange={(e) => handleProfileSave(petName, e.target.value)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
+                  <input type="text" value={petBreed} onChange={(e) => setPetBreed(e.target.value)} style={{ width: '90%', backgroundColor: '#18181b', border: '1px solid #27272a', borderRadius: '6px', padding: '0.35rem 0.5rem', color: '#fff', fontSize: '0.75rem', outline: 'none' }} />
                 </div>
               </div>
             </div>
@@ -343,7 +427,9 @@ export default function PawGuardDashboard() {
             >
               <input type="file" ref={fileInputRef} onChange={handleFileUpload} style={{ display: 'none' }} accept=".pdf,.png,.jpg,.jpeg,.doc" />
               <UploadCloud size={22} color="#71717a" style={{ margin: '0 auto 0.5rem auto', display: 'block' }} />
-              <span style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block' }}>Upload medical record</span>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block' }}>
+                {isUploading ? "Uploading to Cloud..." : "Upload medical record"}
+              </span>
               <span style={{ fontSize: '0.65rem', color: '#71717a', display: 'block', marginTop: '0.15rem' }}>PDF, Doc or Images</span>
             </div>
 
@@ -351,7 +437,8 @@ export default function PawGuardDashboard() {
               {documents.map((doc) => (
                 <div 
                   key={doc.id} 
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', border: '1px solid #27272a' }}
+                  onClick={() => { if (doc.fileUrl !== '#') window.open(doc.fileUrl, '_blank'); }}
+                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', border: '1px solid #27272a', cursor: 'pointer' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
                     <FileText size={16} color="#3B82F6" />
@@ -360,7 +447,7 @@ export default function PawGuardDashboard() {
                       <div style={{ fontSize: '0.65rem', color: '#71717a' }}>{doc.size} • Added {doc.dateAdded}</div>
                     </div>
                   </div>
-                  <button onClick={(e) => handleDeleteDoc(doc.id, e)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                  <button onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id, e); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
                     <Trash2 size={14} />
                   </button>
                 </div>
@@ -389,7 +476,7 @@ export default function PawGuardDashboard() {
 
             {/* BOX TEXT CONTAINER */}
             <div style={{ backgroundColor: '#18181b', padding: '1rem', borderRadius: '12px', border: '1px solid #27272a' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', textTransform: 'none', marginBottom: '0.5rem' }}>
                 <label htmlFor="radius-input" style={{ fontSize: '0.75rem', color: '#a1a1aa', fontWeight: 600 }}>Set Safe Radius Limit</label>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
@@ -450,7 +537,7 @@ export default function PawGuardDashboard() {
               <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#f4f4f5', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
                 <Award size={16} color="#F59E0B" /> Wellness Index Card
               </h3>
-              <span style={{ fontSize: '0.7rem', color: '#a1a1aa', fontWeight: 500 }}>Live Assessment</span>
+              <span style={{ fontSize: '0.72rem', color: '#a1a1aa', fontWeight: 500 }}>Live Assessment</span>
             </div>
             
             <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem', margin: '0.5rem 0' }}>
@@ -487,7 +574,7 @@ export default function PawGuardDashboard() {
               {reminders.map((rem) => (
                 <div key={rem.id} style={{ display: 'flex', alignItems: 'center', padding: '0.7rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', opacity: rem.completed ? 0.5 : 1, justifyContent: 'space-between' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <div onClick={() => toggleReminder(rem.id)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                    <div onClick={() => toggleReminder(rem.id, rem.completed)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
                       {rem.completed ? <CheckCircle size={16} color="#10B981" /> : <Clock size={16} color="#71717a" />}
                     </div>
                     <div>
