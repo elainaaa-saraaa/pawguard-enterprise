@@ -103,17 +103,17 @@ export default function PawGuardDashboard() {
     try {
       const { data, error } = await supabase
         .from('medical_documents')
-        .select('*')
-        .order('created_at', { ascending: false } as any);
+        .select('*');
+        
       if (error) throw error;
       if (data) {
         setDocuments(data.map(d => ({
           id: d.id,
-          name: d.name,
-          size: d.size,
-          dateAdded: d.date_added || d.created_at?.split('T')[0] || '',
-          fileUrl: d.file_url,
-          storagePath: d.storage_path
+          name: d.name || 'Unnamed Document',
+          size: d.size || '0.0 MB',
+          dateAdded: d.date_added || new Date().toISOString().split('T')[0],
+          fileUrl: d.file_url || '#',
+          storagePath: d.storage_path || ''
         })));
       }
     } catch (e: any) {
@@ -233,7 +233,7 @@ export default function PawGuardDashboard() {
       await fetchSupabaseDocuments();
     } catch (err: any) {
       alert(`Storage Upload Error: ${err.message}`);
-    } finally {
+    } {
       setIsUploading(false);
     }
   };
@@ -347,7 +347,7 @@ export default function PawGuardDashboard() {
 
           <div 
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', backgroundColor: '#141417', border: '1px solid #27272a', padding: '0.4rem 1rem', borderRadius: '14px', cursor: 'pointer' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem 1rem', borderRadius: '14px', cursor: 'pointer' }}
           >
             <img src={petPfp} alt="Profile" style={{ width: '32px', height: '32px', borderRadius: '50%', objectFit: 'cover', border: `1px solid ${getStatusColor(currentSound, stressScore)}` }} />
             <div style={{ textAlign: 'left' }}>
@@ -435,18 +435,39 @@ export default function PawGuardDashboard() {
               {documents.map((doc) => (
                 <div 
                   key={doc.id} 
-                  onClick={() => { if (doc.fileUrl !== '#') window.open(doc.fileUrl, '_blank'); }}
-                  style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0.75rem', backgroundColor: '#18181b', borderRadius: '8px', border: '1px solid #27272a', cursor: 'pointer' }}
+                  onClick={() => { if (doc.fileUrl && doc.fileUrl !== '#') window.open(doc.fileUrl, '_blank'); }}
+                  style={{ 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    padding: '0.65rem 0.85rem', 
+                    backgroundColor: '#18181b', 
+                    borderRadius: '10px', 
+                    border: '1px solid #27272a', 
+                    cursor: 'pointer',
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#27272a')}
+                  onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#18181b')}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', overflow: 'hidden' }}>
-                    <FileText size={16} color="#3B82F6" />
-                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#e4e4e7' }}>{doc.name}</div>
-                      <div style={{ fontSize: '0.65rem', color: '#71717a' }}>{doc.size} • Added {doc.dateAdded}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', overflow: 'hidden', flex: 1 }}>
+                    <FileText size={18} color="#3B82F6" style={{ flexShrink: 0 }} />
+                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'left' }}>
+                      <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#f4f4f5' }}>
+                        {doc.name}
+                      </div>
+                      <div style={{ fontSize: '0.65rem', color: '#71717a', marginTop: '0.15rem' }}>
+                        {doc.size} • Added {doc.dateAdded}
+                      </div>
                     </div>
                   </div>
-                  <button onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id, e); }} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
-                    <Trash2 size={14} />
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleDeleteDoc(doc.id, e); }} 
+                    style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', padding: '0.2rem', transition: 'color 0.2s' }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = '#71717a')}
+                  >
+                    <Trash2 size={15} />
                   </button>
                 </div>
               ))}
