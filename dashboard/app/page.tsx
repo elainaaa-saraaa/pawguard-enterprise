@@ -218,7 +218,6 @@ export default function PawGuardDashboard() {
 
     setIsUploading(true);
     try {
-      // Direct asset pointer URL mapped natively to your active Supabase storage bucket layout
       const generatedBucketUrl = `https://rnnynrdxogkkdnsilmpz.supabase.co/storage/v1/object/public/records/${Date.now()}_${file.name}`;
       
       const { error } = await supabase
@@ -256,7 +255,6 @@ export default function PawGuardDashboard() {
   const handlePfpUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    // Bypasses third party middleware via client runtime canvas reading profiles
     const localReader = new FileReader();
     localReader.onload = () => {
       if (typeof localReader.result === 'string') {
@@ -573,18 +571,29 @@ export default function PawGuardDashboard() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
               {reminders.map((rem) => (
                 <div key={rem.id} style={{ display: 'flex', alignItems: 'center', padding: '0.7rem', backgroundColor: '#18181b', borderRadius: '12px', border: '1px solid #27272a', opacity: rem.completed ? 0.5 : 1, justifyContent: 'space-between' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                    <div onClick={() => toggleReminder(rem.id, rem.completed)} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                  
+                  {/* Clickable Card Body Area for Easy Striking Option */}
+                  <div 
+                    onClick={() => toggleReminder(rem.id, rem.completed)} 
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', flex: 1 }}
+                  >
+                    <div>
                       {rem.completed ? <CheckCircle size={16} color="#10B981" /> : <Clock size={16} color="#71717a" />}
                     </div>
                     <div>
-                      <div style={{ fontSize: '0.8rem', fontWeight: 600, textDecoration: rem.completed ? 'line-through' : 'none' }}>{rem.title}</div>
-                      <div style={{ fontSize: '0.68rem', color: '#71717a' }}>{rem.type} • {rem.date} <span style={{ color: '#a1a1aa' }}>@{rem.time}</span></div>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, textDecoration: rem.completed ? 'line-through' : 'none', color: rem.completed ? '#71717a' : '#f4f4f5' }}>
+                        {rem.title}
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#71717a', textDecoration: rem.completed ? 'line-through' : 'none' }}>
+                        {rem.type} • {rem.date} <span style={{ color: rem.completed ? '#71717a' : '#a1a1aa' }}>@{rem.time}</span>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Detached Far-Right Delete Button */}
                   <button 
-                    onClick={() => deleteReminder(rem.id)}
-                    style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}
+                    onClick={(e) => { e.stopPropagation(); deleteReminder(rem.id); }}
+                    style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer', padding: '0.2rem' }}
                   >
                     <X size={14} />
                   </button>
